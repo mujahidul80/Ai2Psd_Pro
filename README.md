@@ -129,7 +129,7 @@ If you prefer installing manually or are using macOS:
 
 <p align="left">
   <b>Developed by Mujahidul Islam</b><br>
-  💬 <b>WhatsApp</b>: <a href="https://wa.me/8801571432927"><b>+880 1571-432927</b></a> (Click to chat)<br>
+  💬 <b>WhatsApp</b>: <a href="https://wa.me/8801571432927"><b>Chat on WhatsApp</b></a><br>
   🔗 <b>GitHub</b>: <a href="https://github.com/mujahidul80">@mujahidul80</a><br>
   🌐 <b>Blog & Official Updates</b>: <a href="https://mujahidulib.blogspot.com">mujahidulib.blogspot.com</a><br>
   📜 <b>License</b>: <a href="LICENSE">MIT License</a>
