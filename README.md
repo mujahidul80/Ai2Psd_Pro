@@ -62,9 +62,11 @@ Press <kbd>Win</kbd> + <kbd>X</kbd>, open **PowerShell**, paste this command and
 irm https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/install.ps1 | iex
 ```
 
-### 🔹 Option 2: Double-Click File
+> **💡 Tip:** When Windows prompts for Administrator access (UAC), click **Yes** to allow the installer to place the script into your Adobe Illustrator `Program Files` directory.
+
+### 🔹 Option 2: 1-Click Batch File
 1. Download [**`install.bat`**](https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/install.bat).
-2. Double-click the file to run the installer automatically.
+2. Double-click (or right-click and choose **Run as administrator**) to install automatically.
 
 > **💡 What happens behind the scenes:**
 > - Automatically detects all installed Adobe Illustrator versions (`2020`, `2024`, `2025`, `2026+`).

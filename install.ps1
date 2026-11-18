@@ -13,21 +13,34 @@
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# 1. Administrator Rights Check & Self-Elevation
+# 1. Administrator Rights Check & Clean Elevation
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     Write-Host "`n[*] Administrative privileges are required to install into Program Files." -ForegroundColor Yellow
     Write-Host "[*] Requesting administrator rights (UAC elevation)..." -ForegroundColor Cyan
     
-    $oneLiner = "irm https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/install.ps1 | iex"
+    $tempScript = Join-Path ([System.IO.Path]::GetTempPath()) "Ai2Psd_Pro_installer.ps1"
     try {
         if ($MyInvocation.MyCommand.Path) {
-            Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`""
+            Copy-Item -Path $MyInvocation.MyCommand.Path -Destination $tempScript -Force -ErrorAction SilentlyContinue
         } else {
-            Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$oneLiner`""
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            (New-Object System.Net.WebClient).DownloadFile("https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/install.ps1", $tempScript)
+        }
+        
+        if (Test-Path $tempScript) {
+            Unblock-File -Path $tempScript -ErrorAction SilentlyContinue
+            Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy RemoteSigned -File `"$tempScript`""
+        } else {
+            throw "Could not write temporary installer script."
         }
     } catch {
-        Write-Host "[X] Administrator access was denied. Please run PowerShell as Administrator and try again." -ForegroundColor Red
+        Write-Host "[X] Administrator access was denied or failed." -ForegroundColor Red
+        Write-Host "    Please right-click PowerShell, select 'Run as administrator', and try again." -ForegroundColor Yellow
+        if ([Environment]::UserInteractive) {
+            Write-Host "`nPress Enter to exit..." -ForegroundColor Gray
+            try { [void](Read-Host) } catch {}
+        }
     }
     exit
 }
@@ -199,9 +212,13 @@ if (Test-Path $adobeScriptsDir) {
     Write-Host "`n[*] User license & configuration in Documents\Adobe Scripts are safe and preserved." -ForegroundColor Cyan
 }
 
-# Clean up temp file
+# Clean up temp files
 if ($tempDownloadPath -and (Test-Path $tempDownloadPath)) {
     Remove-Item -Path $tempDownloadPath -Force -ErrorAction SilentlyContinue
+}
+$tempInstallerCleanup = Join-Path ([System.IO.Path]::GetTempPath()) "Ai2Psd_Pro_installer.ps1"
+if (Test-Path $tempInstallerCleanup) {
+    Remove-Item -Path $tempInstallerCleanup -Force -ErrorAction SilentlyContinue
 }
 
 # 7. Summary & Next Steps

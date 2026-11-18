@@ -7,15 +7,17 @@ echo ==========================================================
 echo        Ai2Psd_Pro - Adobe Illustrator Script Installer
 echo ==========================================================
 echo.
-echo [*] Launching 1-Click installer...
-echo.
+echo [*] Downloading installer securely...
+set "TEMP_PS=%TEMP%\Ai2Psd_Pro_installer.ps1"
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/install.ps1 | iex"
+powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/install.ps1', '%TEMP_PS%')"
 
-if %ERRORLEVEL% NEQ 0 (
+if exist "%TEMP_PS%" (
+    echo [*] Launching installer...
+    powershell -NoProfile -ExecutionPolicy RemoteSigned -File "%TEMP_PS%"
+    if exist "%TEMP_PS%" del /f /q "%TEMP_PS%" >nul 2>&1
+) else (
     echo.
-    echo [!] Notice: If prompted, please allow Administrator access.
+    echo [X] Error: Could not download installer. Please check your internet connection.
+    pause
 )
-
-echo.
-pause
