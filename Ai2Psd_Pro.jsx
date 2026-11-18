@@ -1,8 +1,9 @@
 /*
   Ai2Psd_Pro.jsx for Adobe Illustrator
-  Description: Fast vector path preparation & export from AI to layered PSD.
+  Description: Ultra-fast vector path preparation & export from AI to layered PSD (Blur & Effects Preserved).
   Requirements: Adobe Illustrator CS6 and later
-  Edition: Pro Licensed Version (Self-Registration + HWID + 7-Day Auto Check)
+  Edition: Pro Licensed Version (Hardware-Bound + Tamper-Protected + Silent 7-Day Auto Update)
+  Author: MI Creative Studio (https://github.com/mujahidul80)
 */
 
 //@target illustrator
@@ -10,17 +11,32 @@ app.preferences.setBooleanPreference('ShowExternalJSXWarning', false);
 $.localize = true;
 
 // ==========================================
-// GOOGLE SCRIPT LICENSE CONFIGURATION
+// GOOGLE SCRIPT & GITHUB CONFIGURATION
 // ==========================================
 var LICENSE_CFG = {
+  currentVersion: '5.2',
   apiUrl: 'https://script.google.com/macros/s/AKfycby9-GyRG5SWyUvoUHuEhtX_DY0n8KjEH_M8TYMAF3eCYpRnED9mJXNyE5hrIZ-FwCQr/exec',
-  supportUrl: 'https://mujahidulib.blogspot.com',
-  licFile: Folder.myDocuments + '/Adobe Scripts/Ai2Psd_Pro_lic.json',
-  checkIntervalDays: 7 // প্রতি ৭ দিন পর পর অনলাইনে চেক করবে
+  versionUrl: 'https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/version.json',
+  installCmd: 'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/install.ps1 | iex"',
+  profileUrl: 'https://github.com/mujahidul80',
+  repoUrl: 'https://github.com/mujahidul80/Ai2Psd_Pro',
+  licFile: Folder.myDocuments + '/Adobe Scripts/.ai2psd_pro_sys.dat',
+  updFile: Folder.myDocuments + '/Adobe Scripts/.ai2psd_pro_upd.dat',
+  checkIntervalDays: 7,
+  offlineGraceDays: 3
 };
 
 /**
- * কাস্টম ভেক্টর মনোগ্রাম লোগো ড্রয়িং (MI - Brand Emblem)
+ * Illustrator উইন্ডো যেন মিনিমাইজ বা ব্যাকগ্রাউন্ডে চলে না যায় তার জন্য ফোকাস রিস্টোর
+ */
+function keepIllustratorFocused() {
+  try {
+    app.activate();
+  } catch (e) { }
+}
+
+/**
+ * কাস্টম ভেক্টর মনোগ্রাম লোগো ড্রয়িং (MI - Brand Emblem)
  */
 function drawBrandLogo(container, size) {
   var logoBox = container.add('group');
@@ -71,7 +87,7 @@ function drawBrandLogo(container, size) {
 }
 
 /**
- * ইন্টারঅ্যাক্টিভ টেক্সট স্টাইলিং (সাধারণ ও মিনিমাল মোডসহ)
+ * ইন্টারঅ্যাক্টিভ টেক্সট লিংক স্টাইলিং
  */
 function setupActionLink(textCtrl, onClickFn, isSubtle) {
   var isDarkUI = app.preferences.getRealPreference('uiBrightness') <= 0.5;
@@ -79,7 +95,6 @@ function setupActionLink(textCtrl, onClickFn, isSubtle) {
   var colNormal, colHover;
 
   if (isSubtle) {
-    // চোখে কম পড়ে এমন মিনিমাল ও সফট কালার
     colNormal = gfx.newPen(gfx.PenType.SOLID_COLOR, isDarkUI ? [0.52, 0.57, 0.64] : [0.45, 0.48, 0.54], 1);
     colHover = gfx.newPen(gfx.PenType.SOLID_COLOR, isDarkUI ? [0.30, 0.72, 0.96] : [0.08, 0.45, 0.90], 1);
   } else {
@@ -105,9 +120,231 @@ function setupActionLink(textCtrl, onClickFn, isSubtle) {
 }
 
 /**
- * পিসির ইউনিক হার্ডওয়্যার আইডি (HWID) বের করা
+ * যেকোনো URL থেকে ফাস্ট GET রিকোয়েস্ট পাঠিয়ে টেক্সট আনা
  */
-function getMachineHWID() {
+function fetchUrlContent(targetUrl) {
+  var isMac = /mac/i.test($.os);
+  var uid = new Date().getTime() + '_' + Math.floor(Math.random() * 1000);
+  var outFile = new File(Folder.temp + '/ai2psd_res_' + uid + '.txt');
+  var doneFile = new File(Folder.temp + '/ai2psd_done_' + uid + '.flag');
+  if (outFile.exists) outFile.remove();
+  if (doneFile.exists) doneFile.remove();
+
+  if (isMac) {
+    var shFile = new File(Folder.temp + '/ai2psd_req_' + uid + '.sh');
+    shFile.open('w');
+    shFile.writeln('#!/bin/bash');
+    shFile.writeln('curl -s -L --connect-timeout 4 --max-time 5 "' + targetUrl + '" -o "' + outFile.fsName + '"');
+    shFile.writeln('echo "done" > "' + doneFile.fsName + '"');
+    shFile.close();
+    shFile.execute();
+
+    for (var m = 0; m < 50; m++) {
+      $.sleep(100);
+      if (doneFile.exists) break;
+    }
+    if (shFile.exists) shFile.remove();
+    if (doneFile.exists) doneFile.remove();
+  } else {
+    var vbsFile = new File(Folder.temp + '/ai2psd_req_' + uid + '.vbs');
+    vbsFile.open('w');
+    vbsFile.writeln('On Error Resume Next');
+    vbsFile.writeln('Set http = CreateObject("WinHttp.WinHttpRequest.5.1")');
+    vbsFile.writeln('http.SetTimeouts 2500, 2500, 4000, 4000');
+    vbsFile.writeln('http.Open "GET", "' + targetUrl + '", False');
+    vbsFile.writeln('http.Send');
+    vbsFile.writeln('Set fso = CreateObject("Scripting.FileSystemObject")');
+    vbsFile.writeln('Set f = fso.CreateTextFile("' + outFile.fsName + '", True, True)');
+    vbsFile.writeln('If Err.Number = 0 And http.Status = 200 Then');
+    vbsFile.writeln('  f.Write http.responseText');
+    vbsFile.writeln('End If');
+    vbsFile.writeln('f.Close');
+    vbsFile.writeln('Set flag = fso.CreateTextFile("' + doneFile.fsName + '", True)');
+    vbsFile.writeln('flag.Write "1"');
+    vbsFile.writeln('flag.Close');
+    vbsFile.close();
+
+    vbsFile.execute();
+
+    for (var w = 0; w < 45; w++) {
+      $.sleep(100);
+      if (doneFile.exists) break;
+    }
+    if (vbsFile.exists) vbsFile.remove();
+    if (doneFile.exists) doneFile.remove();
+    keepIllustratorFocused();
+  }
+
+  var content = '';
+  if (outFile.exists) {
+    outFile.encoding = isMac ? 'UTF-8' : 'UTF-16';
+    outFile.open('r');
+    content = outFile.read().replace(/^\uFEFF/, '').replace(/^\s+|\s+$/g, '');
+    outFile.close();
+    outFile.remove();
+  }
+  return content;
+}
+
+/**
+ * ক্লিপবোর্ডে টেক্সট কপি করা
+ */
+function copyToClipboard(textStr) {
+  var isMac = /mac/i.test($.os);
+  try {
+    if (isMac) {
+      var sh = new File(Folder.temp + '/ai2psd_clip.sh');
+      sh.open('w');
+      sh.writeln('#!/bin/bash');
+      sh.writeln('printf %s "' + textStr.replace(/"/g, '\\"') + '" | pbcopy');
+      sh.close();
+      sh.execute();
+      $.sleep(150);
+      if (sh.exists) sh.remove();
+    } else {
+      var bat = new File(Folder.temp + '/ai2psd_clip.bat');
+      bat.open('w');
+      bat.writeln('@echo off');
+      bat.writeln('echo | set /p="' + textStr.replace(/"/g, '""') + '" | clip');
+      bat.close();
+      bat.execute();
+      $.sleep(150);
+      if (bat.exists) bat.remove();
+      keepIllustratorFocused();
+    }
+  } catch (e) { }
+}
+
+/**
+ * ভার্সন তুলনা ফাংশন (যেমন "5.3" > "5.2")
+ */
+function isNewerVersion(remoteVer, localVer) {
+  var rParts = remoteVer.replace(/[^\d.]/g, '').split('.');
+  var lParts = localVer.replace(/[^\d.]/g, '').split('.');
+  var len = Math.max(rParts.length, lParts.length);
+  for (var i = 0; i < len; i++) {
+    var r = parseInt(rParts[i] || '0', 10);
+    var l = parseInt(lParts[i] || '0', 10);
+    if (r > l) return true;
+    if (r < l) return false;
+  }
+  return false;
+}
+
+/**
+ * ব্যাকগ্রাউন্ডে নীরবে আপডেট চেক (প্রতি ৭ দিন পর পর)
+ */
+function checkSoftwareUpdateSilent() {
+  var now = new Date().getTime();
+  var checkIntervalMs = LICENSE_CFG.checkIntervalDays * 24 * 60 * 60 * 1000;
+  var uf = new File(LICENSE_CFG.updFile);
+
+  if (uf.exists) {
+    try {
+      uf.open('r');
+      var lastUpdCheck = parseFloat(uf.read().replace(/^\s+|\s+$/g, ''));
+      uf.close();
+      if (!isNaN(lastUpdCheck) && (now - lastUpdCheck) < checkIntervalMs) {
+        return; // ৭ দিন পূর্ণ না হলে কিছুই করবে না
+      }
+    } catch (e) { }
+  }
+
+  var rawJson = fetchUrlContent(LICENSE_CFG.versionUrl + '?t=' + now);
+
+  try {
+    var dir = Folder(Folder.myDocuments + '/Adobe Scripts/');
+    if (!dir.exists) dir.create();
+    uf.open('w');
+    uf.write(now.toString());
+    uf.close();
+  } catch (e) { }
+
+  if (!rawJson) return;
+
+  try {
+    var info = new Function('return (' + rawJson + ')')();
+    if (info && info.version && isNewerVersion(info.version, LICENSE_CFG.currentVersion)) {
+      showUpdateDialog(info.version, info.notes || 'Performance improvements & new features.');
+    }
+  } catch (e) { }
+}
+
+/**
+ * নতুন আপডেট পাওয়া গেলে পপ-আপ দেখাবে এবং GitHub-এ নিয়ে যাবে
+ */
+function showUpdateDialog(newVer, notes) {
+  keepIllustratorFocused();
+  var isDarkUI = app.preferences.getRealPreference('uiBrightness') <= 0.5;
+  var uDlg = new Window('dialog', 'Ai2Psd_Pro — Update Available');
+  uDlg.orientation = 'column';
+  uDlg.alignChildren = ['fill', 'top'];
+  uDlg.spacing = 12;
+  uDlg.margins = [18, 18, 18, 14];
+
+  var head = uDlg.add('group');
+  head.orientation = 'row';
+  head.alignChildren = ['left', 'center'];
+  head.spacing = 12;
+
+  drawBrandLogo(head, 38);
+
+  var tCol = head.add('group');
+  tCol.orientation = 'column';
+  tCol.alignChildren = ['left', 'center'];
+  tCol.spacing = 2;
+
+  var title = tCol.add('statictext', undefined, 'New Update Available: v' + newVer);
+  title.graphics.font = ScriptUI.newFont(title.graphics.font.name, 'BOLD', 14);
+
+  var sub = tCol.add('statictext', undefined, 'Installed Version: v' + LICENSE_CFG.currentVersion);
+  sub.graphics.font = ScriptUI.newFont(sub.graphics.font.name, 'REGULAR', 9);
+  sub.graphics.foregroundColor = sub.graphics.newPen(sub.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.65, 0.78] : [0.40, 0.45, 0.52], 1);
+
+  var pnl = uDlg.add('panel', undefined, 'Update Details');
+  pnl.orientation = 'column';
+  pnl.alignChildren = ['fill', 'top'];
+  pnl.margins = [14, 16, 14, 14];
+  pnl.spacing = 8;
+
+  var noteTxt = pnl.add('statictext', undefined, 'What\'s New: ' + notes + '\n\nRun this 1-click command in CMD/PowerShell to replace old files automatically:', { multiline: true });
+  noteTxt.preferredSize.width = 330;
+
+  var cmdBox = pnl.add('edittext', undefined, LICENSE_CFG.installCmd, { readonly: true });
+  cmdBox.preferredSize = [330, 26];
+
+  var btnGrp = uDlg.add('group');
+  btnGrp.orientation = 'row';
+  btnGrp.alignChildren = ['fill', 'center'];
+  btnGrp.spacing = 8;
+
+  var laterBtn = btnGrp.add('button', undefined, 'Later', { name: 'cancel' });
+  var goGitBtn = btnGrp.add('button', undefined, 'Copy CMD & Open GitHub \u2197', { name: 'ok' });
+  laterBtn.preferredSize.height = 28;
+  goGitBtn.preferredSize.height = 28;
+
+  goGitBtn.onClick = function () {
+    copyToClipboard(LICENSE_CFG.installCmd);
+    openURL(LICENSE_CFG.repoUrl);
+    uDlg.close();
+  };
+
+  laterBtn.onClick = function () {
+    uDlg.close();
+    keepIllustratorFocused();
+  };
+
+  uDlg.show();
+}
+
+/**
+ * পিসির ইউনিক হার্ডওয়্যার আইডি (HWID) বের করা
+ */
+function getMachineHWID(savedData) {
+  if (savedData && savedData.hwid && savedData.hwid.length >= 5) {
+    return savedData.hwid;
+  }
+
   var isMac = /mac/i.test($.os);
   var outFile = new File(Folder.temp + '/ai2psd_pro_hwid.txt');
   if (outFile.exists) outFile.remove();
@@ -119,13 +356,17 @@ function getMachineHWID() {
     shFile.writeln('ioreg -rd1 -c IOPlatformExpertDevice | awk \'/IOPlatformUUID/ { split($0, line, "\\""); printf("%s", line[4]); }\' > "' + outFile.fsName + '"');
     shFile.close();
     shFile.execute();
-    $.sleep(1000);
+    for (var m = 0; m < 15; m++) {
+      $.sleep(80);
+      if (outFile.exists && outFile.length > 0) break;
+    }
     if (shFile.exists) shFile.remove();
   } else {
     var vbsFile = new File(Folder.temp + '/ai2psd_pro_hwid.vbs');
     vbsFile.open('w');
+    vbsFile.writeln('On Error Resume Next');
     vbsFile.writeln('Set objWMIService = GetObject("winmgmts:\\\\.\\root\\cimv2")');
-    vbsFile.writeln('Set colItems = objWMIService.ExecQuery("Select * from Win32_ComputerSystemProduct")');
+    vbsFile.writeln('Set colItems = objWMIService.ExecQuery("Select UUID from Win32_ComputerSystemProduct")');
     vbsFile.writeln('For Each objItem in colItems');
     vbsFile.writeln('  uuid = objItem.UUID');
     vbsFile.writeln('Next');
@@ -137,11 +378,12 @@ function getMachineHWID() {
 
     vbsFile.execute();
 
-    for (var i = 0; i < 30; i++) {
-      $.sleep(100);
+    for (var i = 0; i < 20; i++) {
+      $.sleep(80);
       if (outFile.exists && outFile.length > 0) break;
     }
     if (vbsFile.exists) vbsFile.remove();
+    keepIllustratorFocused();
   }
 
   var hwid = '';
@@ -160,116 +402,190 @@ function getMachineHWID() {
   return hwid;
 }
 
+/**
+ * লাইসেন্স টেম্পার-প্রুফ সিগনেচার জেনারেটর ও এনকোডার
+ */
+function computeLicenseSig(key, ts, hwid) {
+  var raw = 'MI_PRO_SALT_9921|' + key + '|' + ts + '|' + hwid;
+  var hash = 5381;
+  for (var i = 0; i < raw.length; i++) {
+    hash = ((hash << 5) + hash) + raw.charCodeAt(i);
+    hash = hash & 0x7FFFFFFF;
+  }
+  return hash.toString(16).toUpperCase();
+}
+
+function encodePayload(str) {
+  var out = [];
+  for (var i = 0; i < str.length; i++) {
+    var code = str.charCodeAt(i) ^ ((i % 13) + 42);
+    var hex = code.toString(16);
+    out.push(hex.length === 1 ? '0' + hex : hex);
+  }
+  return out.join('');
+}
+
+function decodePayload(hexStr) {
+  var out = '';
+  for (var i = 0; i < hexStr.length; i += 2) {
+    var idx = i / 2;
+    var code = parseInt(hexStr.substr(i, 2), 16) ^ ((idx % 13) + 42);
+    out += String.fromCharCode(code);
+  }
+  return out;
+}
+
+function setFileProtection(fileObj, lock) {
+  var isMac = /mac/i.test($.os);
+  if (isMac) {
+    fileObj.readonly = lock;
+  } else {
+    var bat = new File(Folder.temp + '/ai2psd_attr.bat');
+    bat.open('w');
+    if (lock) {
+      bat.writeln('@echo off');
+      bat.writeln('attrib +r +h "' + fileObj.fsName + '"');
+    } else {
+      bat.writeln('@echo off');
+      bat.writeln('attrib -r -h "' + fileObj.fsName + '"');
+    }
+    bat.close();
+    bat.execute();
+    $.sleep(120);
+    if (bat.exists) bat.remove();
+    keepIllustratorFocused();
+  }
+}
+
 function readLicenseData() {
   var f = new File(LICENSE_CFG.licFile);
   if (!f.exists) return null;
   try {
     f.encoding = 'UTF-8';
     f.open('r');
-    var str = f.read();
+    var hexStr = f.read().replace(/^\s+|\s+$/g, '');
     f.close();
-    return new Function('return (' + str + ')')();
+    var jsonStr = decodePayload(hexStr);
+    var obj = new Function('return (' + jsonStr + ')')();
+    if (!obj || !obj.key || !obj.lastCheck || !obj.hwid || !obj.sig) return null;
+
+    var expectedSig = computeLicenseSig(obj.key, obj.lastCheck, obj.hwid);
+    if (obj.sig !== expectedSig) {
+      removeLicenseData();
+      return null;
+    }
+    return obj;
   } catch (e) {
     return null;
   }
 }
 
-function saveLicenseData(key, timestamp) {
+function saveLicenseData(key, timestamp, hwid) {
   var dir = Folder(Folder.myDocuments + '/Adobe Scripts/');
   if (!dir.exists) dir.create();
   var f = new File(LICENSE_CFG.licFile);
+  if (f.exists) {
+    setFileProtection(f, false);
+  }
+
+  var tsStr = timestamp.toString();
+  var sig = computeLicenseSig(key, tsStr, hwid);
+  var jsonStr = stringify({
+    key: key,
+    lastCheck: tsStr,
+    hwid: hwid,
+    sig: sig
+  });
+
   f.encoding = 'UTF-8';
   f.open('w');
-  f.write(stringify({
-    key: key,
-    lastCheck: timestamp.toString()
-  }));
+  f.write(encodePayload(jsonStr));
   f.close();
+
+  setFileProtection(f, true);
 }
 
 function removeLicenseData() {
   var f = new File(LICENSE_CFG.licFile);
-  if (f.exists) f.remove();
+  if (f.exists) {
+    setFileProtection(f, false);
+    try { f.remove(); } catch (e) { }
+  }
 }
 
 /**
- * সেলফ-রেজিস্ট্রেশন ডায়ালগ (ছোট Support বাটন ও MI Creative Studio লিংকসহ)
+ * সেলফ-রেজিস্ট্রেশন ডায়ালগ
  */
 function showRegistrationDialog() {
+  keepIllustratorFocused();
   var isMac = /mac/i.test($.os);
   var isDarkUI = app.preferences.getRealPreference('uiBrightness') <= 0.5;
   var regName = null;
 
-  var regDlg = new Window('dialog', 'Ai2Psd_Pro — Get License');
-      regDlg.orientation = 'column';
-      regDlg.alignChildren = ['fill', 'top'];
-      regDlg.spacing = 12;
-      regDlg.margins = [18, 18, 18, 14];
+  var regDlg = new Window('dialog', 'Ai2Psd_Pro — License Registration');
+  regDlg.orientation = 'column';
+  regDlg.alignChildren = ['fill', 'top'];
+  regDlg.spacing = 12;
+  regDlg.margins = [18, 18, 18, 14];
 
-  // HEADER + SMALL SUPPORT BUTTON
   var headerGrp = regDlg.add('group');
-      headerGrp.orientation = 'row';
-      headerGrp.alignChildren = ['fill', 'center'];
-      headerGrp.spacing = 10;
+  headerGrp.orientation = 'row';
+  headerGrp.alignChildren = ['fill', 'center'];
+  headerGrp.spacing = 10;
 
   var leftHead = headerGrp.add('group');
-      leftHead.orientation = 'row';
-      leftHead.alignChildren = ['left', 'center'];
-      leftHead.spacing = 10;
+  leftHead.orientation = 'row';
+  leftHead.alignChildren = ['left', 'center'];
+  leftHead.spacing = 10;
 
   drawBrandLogo(leftHead, 38);
 
   var titleCol = leftHead.add('group');
-      titleCol.orientation = 'column';
-      titleCol.alignChildren = ['left', 'center'];
-      titleCol.spacing = 2;
+  titleCol.orientation = 'column';
+  titleCol.alignChildren = ['left', 'center'];
+  titleCol.spacing = 2;
 
-  var appTitle = titleCol.add('statictext', undefined, 'Instant Registration');
-      appTitle.graphics.font = ScriptUI.newFont(appTitle.graphics.font.name, 'BOLD', 13.5);
+  var appTitle = titleCol.add('statictext', undefined, 'Workstation Registration');
+  appTitle.graphics.font = ScriptUI.newFont(appTitle.graphics.font.name, 'BOLD', 13.5);
 
-  var appSub = titleCol.add('statictext', undefined, 'WORKSTATION LICENSE');
-      appSub.graphics.font = ScriptUI.newFont(appSub.graphics.font.name, 'REGULAR', 8.5);
-      var subPen = appSub.graphics.newPen(appSub.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.65, 0.78] : [0.40, 0.45, 0.52], 1);
-      appSub.graphics.foregroundColor = subPen;
+  var appSub = titleCol.add('statictext', undefined, 'PRO EDITION ACTIVATION');
+  appSub.graphics.font = ScriptUI.newFont(appSub.graphics.font.name, 'REGULAR', 8.5);
+  appSub.graphics.foregroundColor = appSub.graphics.newPen(appSub.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.65, 0.78] : [0.40, 0.45, 0.52], 1);
 
-  // চোখে কম পড়ে এমন ছোট Support বাটন
-  var supBtn = headerGrp.add('button', undefined, 'Support');
-      supBtn.preferredSize = [54, 20];
-      supBtn.graphics.font = ScriptUI.newFont(supBtn.graphics.font.name, 'REGULAR', 9);
-      supBtn.onClick = function () { openURL(LICENSE_CFG.supportUrl); };
+  var supBtn = headerGrp.add('button', undefined, 'GitHub');
+  supBtn.preferredSize = [56, 20];
+  supBtn.graphics.font = ScriptUI.newFont(supBtn.graphics.font.name, 'REGULAR', 9);
+  supBtn.onClick = function () { openURL(LICENSE_CFG.repoUrl); };
 
-  // REGISTRATION CARD
   var regPnl = regDlg.add('panel', undefined, 'Workstation Details');
-      regPnl.orientation = 'column';
-      regPnl.alignChildren = ['fill', 'top'];
-      regPnl.margins = [14, 18, 14, 14];
-      regPnl.spacing = 10;
+  regPnl.orientation = 'column';
+  regPnl.alignChildren = ['fill', 'top'];
+  regPnl.margins = [14, 18, 14, 14];
+  regPnl.spacing = 10;
 
-  var descTxt = regPnl.add('statictext', undefined, 'Enter your full name below to generate an instant license key bound to this PC:', { multiline: true });
-      descTxt.preferredSize.width = 310;
+  var descTxt = regPnl.add('statictext', undefined, 'Enter your full name below to generate a permanent Pro license key bound to this workstation:', { multiline: true });
+  descTxt.preferredSize.width = 310;
 
   var nameGrp = regPnl.add('group');
-      nameGrp.orientation = 'column';
-      nameGrp.alignChildren = ['fill', 'top'];
-      nameGrp.spacing = 4;
+  nameGrp.orientation = 'column';
+  nameGrp.alignChildren = ['fill', 'top'];
+  nameGrp.spacing = 4;
 
   var nameLbl = nameGrp.add('statictext', undefined, 'YOUR FULL NAME');
-      nameLbl.graphics.font = ScriptUI.newFont(nameLbl.graphics.font.name, 'BOLD', 9);
+  nameLbl.graphics.font = ScriptUI.newFont(nameLbl.graphics.font.name, 'BOLD', 9);
 
   var nameInp = nameGrp.add('edittext', undefined, '');
-      nameInp.preferredSize = [310, 28];
-      nameInp.active = true;
+  nameInp.preferredSize = [310, 28];
+  nameInp.active = true;
 
-  var hintTxt = regPnl.add('statictext', undefined, '\u2713 Instant activation  |  1 License per workstation');
-      hintTxt.graphics.font = ScriptUI.newFont(hintTxt.graphics.font.name, 'ITALIC', 9.5);
-      var mutedPen = hintTxt.graphics.newPen(hintTxt.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.60, 0.68] : [0.45, 0.48, 0.54], 1);
-      hintTxt.graphics.foregroundColor = mutedPen;
+  var hintTxt = regPnl.add('statictext', undefined, '\u2713 Instant Pro Activation  |  1 License per Workstation');
+  hintTxt.graphics.font = ScriptUI.newFont(hintTxt.graphics.font.name, 'ITALIC', 9.5);
+  hintTxt.graphics.foregroundColor = hintTxt.graphics.newPen(hintTxt.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.60, 0.68] : [0.45, 0.48, 0.54], 1);
 
-  // BUTTONS
   var btnGrp = regDlg.add('group');
-      btnGrp.orientation = 'row';
-      btnGrp.alignChildren = ['fill', 'center'];
-      btnGrp.spacing = 8;
+  btnGrp.orientation = 'row';
+  btnGrp.alignChildren = ['fill', 'center'];
+  btnGrp.spacing = 8;
 
   var backBtn, genBtn;
   if (isMac) {
@@ -282,20 +598,19 @@ function showRegistrationDialog() {
   genBtn.preferredSize.height = 28;
   backBtn.preferredSize.height = 28;
 
-  // FOOTER (MI Creative Studio clickable -> Blogspot)
   var footGrp = regDlg.add('group');
-      footGrp.orientation = 'row';
-      footGrp.alignChildren = ['fill', 'center'];
+  footGrp.orientation = 'row';
+  footGrp.alignChildren = ['fill', 'center'];
 
   var brandTag = footGrp.add('statictext', undefined, 'MI Creative Studio');
-      brandTag.justify = 'left';
-      brandTag.graphics.font = ScriptUI.newFont(brandTag.graphics.font.name, 'BOLD', 9.5);
-      setupActionLink(brandTag, function () { openURL(LICENSE_CFG.supportUrl); }, true);
+  brandTag.justify = 'left';
+  brandTag.graphics.font = ScriptUI.newFont(brandTag.graphics.font.name, 'BOLD', 9.5);
+  setupActionLink(brandTag, function () { openURL(LICENSE_CFG.profileUrl); }, true);
 
-  var supLink = footGrp.add('statictext', undefined, 'Support');
-      supLink.justify = 'right';
-      supLink.graphics.font = ScriptUI.newFont(supLink.graphics.font.name, 'REGULAR', 9);
-      setupActionLink(supLink, function () { openURL(LICENSE_CFG.supportUrl); }, true);
+  var supLink = footGrp.add('statictext', undefined, 'Download / Updates');
+  supLink.justify = 'right';
+  supLink.graphics.font = ScriptUI.newFont(supLink.graphics.font.name, 'REGULAR', 9);
+  setupActionLink(supLink, function () { openURL(LICENSE_CFG.repoUrl); }, true);
 
   genBtn.onClick = function () {
     var val = nameInp.text.replace(/^\s+|\s+$/g, '');
@@ -303,7 +618,7 @@ function showRegistrationDialog() {
       alert('Please enter your valid name (at least 2 characters).', 'Ai2Psd_Pro');
       return;
     }
-    genBtn.text = 'Generating Key...';
+    genBtn.text = 'Activating...';
     genBtn.enabled = false;
     regDlg.update();
     regName = val;
@@ -316,95 +631,90 @@ function showRegistrationDialog() {
   };
 
   regDlg.show();
+  keepIllustratorFocused();
   return regName;
 }
 
 /**
- * প্রিমিয়াম ও প্রফেশনাল অ্যাক্টিভেশন ডায়ালগ (ছোট Support বাটন ও MI Creative Studio লিংকসহ)
+ * প্রফেশনাল অ্যাক্টিভেশন ডায়ালগ
  */
 function showActivationDialog(statusMsg, isError) {
+  keepIllustratorFocused();
   var isMac = /mac/i.test($.os);
   var isDarkUI = app.preferences.getRealPreference('uiBrightness') <= 0.5;
   var actionResult = null;
 
-  var dlg = new Window('dialog', 'Ai2Psd_Pro — License Activation');
-      dlg.orientation = 'column';
-      dlg.alignChildren = ['fill', 'top'];
-      dlg.spacing = 12;
-      dlg.margins = [18, 18, 18, 14];
+  var dlg = new Window('dialog', 'Ai2Psd_Pro — Pro License Activation');
+  dlg.orientation = 'column';
+  dlg.alignChildren = ['fill', 'top'];
+  dlg.spacing = 12;
+  dlg.margins = [18, 18, 18, 14];
 
-  // 1. TOP BRAND HEADER + SMALL SUPPORT BUTTON
   var headerGrp = dlg.add('group');
-      headerGrp.orientation = 'row';
-      headerGrp.alignChildren = ['fill', 'center'];
-      headerGrp.spacing = 10;
+  headerGrp.orientation = 'row';
+  headerGrp.alignChildren = ['fill', 'center'];
+  headerGrp.spacing = 10;
 
   var leftHead = headerGrp.add('group');
-      leftHead.orientation = 'row';
-      leftHead.alignChildren = ['left', 'center'];
-      leftHead.spacing = 12;
+  leftHead.orientation = 'row';
+  leftHead.alignChildren = ['left', 'center'];
+  leftHead.spacing = 12;
 
   drawBrandLogo(leftHead, 42);
 
   var titleCol = leftHead.add('group');
-      titleCol.orientation = 'column';
-      titleCol.alignChildren = ['left', 'center'];
-      titleCol.spacing = 2;
+  titleCol.orientation = 'column';
+  titleCol.alignChildren = ['left', 'center'];
+  titleCol.spacing = 2;
 
   var appTitle = titleCol.add('statictext', undefined, 'Ai2Psd_Pro');
-      appTitle.graphics.font = ScriptUI.newFont(appTitle.graphics.font.name, 'BOLD', 16);
+  appTitle.graphics.font = ScriptUI.newFont(appTitle.graphics.font.name, 'BOLD', 16);
 
-  var appSub = titleCol.add('statictext', undefined, 'VECTOR-TO-PSD ENGINE');
-      appSub.graphics.font = ScriptUI.newFont(appSub.graphics.font.name, 'REGULAR', 8.5);
-      var subPen = appSub.graphics.newPen(appSub.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.65, 0.78] : [0.40, 0.45, 0.52], 1);
-      appSub.graphics.foregroundColor = subPen;
+  var appSub = titleCol.add('statictext', undefined, 'PRO VECTOR-TO-PSD ENGINE');
+  appSub.graphics.font = ScriptUI.newFont(appSub.graphics.font.name, 'REGULAR', 8.5);
+  appSub.graphics.foregroundColor = appSub.graphics.newPen(appSub.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.65, 0.78] : [0.40, 0.45, 0.52], 1);
 
-  // ছোট ও মিনিমাল Support বাটন (চোখে কম পড়বে)
   var supBtn = headerGrp.add('button', undefined, 'Support');
-      supBtn.preferredSize = [54, 20];
-      supBtn.graphics.font = ScriptUI.newFont(supBtn.graphics.font.name, 'REGULAR', 9);
-      supBtn.onClick = function () { openURL(LICENSE_CFG.supportUrl); };
+  supBtn.preferredSize = [56, 20];
+  supBtn.graphics.font = ScriptUI.newFont(supBtn.graphics.font.name, 'REGULAR', 9);
+  supBtn.onClick = function () { openURL(LICENSE_CFG.repoUrl); };
 
-  // 2. LICENSE INPUT CARD
-  var cardPnl = dlg.add('panel', undefined, 'Product Activation');
-      cardPnl.orientation = 'column';
-      cardPnl.alignChildren = ['fill', 'top'];
-      cardPnl.margins = [14, 18, 14, 14];
-      cardPnl.spacing = 10;
+  var cardPnl = dlg.add('panel', undefined, 'Pro License Activation');
+  cardPnl.orientation = 'column';
+  cardPnl.alignChildren = ['fill', 'top'];
+  cardPnl.margins = [14, 18, 14, 14];
+  cardPnl.spacing = 10;
 
-  var msgTxt = cardPnl.add('statictext', undefined, statusMsg || 'Enter your License Key to unlock Ai2Psd_Pro, or click "Get License" below to register instantly.', { multiline: true });
-      msgTxt.preferredSize.width = 315;
-      if (isError) {
-        var errPen = msgTxt.graphics.newPen(msgTxt.graphics.PenType.SOLID_COLOR, isDarkUI ? [1.0, 0.45, 0.45] : [0.80, 0.12, 0.12], 1);
-        msgTxt.graphics.foregroundColor = errPen;
-      }
+  var msgTxt = cardPnl.add('statictext', undefined, statusMsg || 'Enter your Pro License Key to unlock Ai2Psd_Pro, or click "Get License" below to register this workstation.', { multiline: true });
+  msgTxt.preferredSize.width = 315;
+  if (isError) {
+    msgTxt.graphics.foregroundColor = msgTxt.graphics.newPen(msgTxt.graphics.PenType.SOLID_COLOR, isDarkUI ? [1.0, 0.45, 0.45] : [0.80, 0.12, 0.12], 1);
+  }
 
   var inputBoxGrp = cardPnl.add('group');
-      inputBoxGrp.orientation = 'column';
-      inputBoxGrp.alignChildren = ['fill', 'top'];
-      inputBoxGrp.spacing = 4;
+  inputBoxGrp.orientation = 'column';
+  inputBoxGrp.alignChildren = ['fill', 'top'];
+  inputBoxGrp.spacing = 4;
 
-  var keyLbl = inputBoxGrp.add('statictext', undefined, 'LICENSE KEY');
-      keyLbl.graphics.font = ScriptUI.newFont(keyLbl.graphics.font.name, 'BOLD', 9);
+  var keyLbl = inputBoxGrp.add('statictext', undefined, 'PRO LICENSE KEY');
+  keyLbl.graphics.font = ScriptUI.newFont(keyLbl.graphics.font.name, 'BOLD', 9);
 
   var keyInp = inputBoxGrp.add('edittext', undefined, '');
-      keyInp.preferredSize = [315, 28];
-      keyInp.active = true;
+  keyInp.preferredSize = [315, 28];
+  keyInp.active = true;
 
   var infoRow = cardPnl.add('group');
-      infoRow.orientation = 'row';
-      infoRow.alignChildren = ['fill', 'center'];
+  infoRow.orientation = 'row';
+  infoRow.alignChildren = ['fill', 'center'];
 
-  var shieldTxt = infoRow.add('statictext', undefined, '\u25CF Hardware-Bound  |  7-Day Auto Sync');
-      shieldTxt.graphics.font = ScriptUI.newFont(shieldTxt.graphics.font.name, 'ITALIC', 9.5);
-      var mutedPen = shieldTxt.graphics.newPen(shieldTxt.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.60, 0.68] : [0.45, 0.48, 0.54], 1);
-      shieldTxt.graphics.foregroundColor = mutedPen;
+  var shieldTxt = infoRow.add('statictext', undefined, '\u25CF Hardware-Bound Pro License  |  Offline Supported');
+  shieldTxt.graphics.font = ScriptUI.newFont(shieldTxt.graphics.font.name, 'ITALIC', 9.5);
+  shieldTxt.graphics.foregroundColor = shieldTxt.graphics.newPen(shieldTxt.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.60, 0.68] : [0.45, 0.48, 0.54], 1);
 
-  // 3. ACTION BUTTONS
   var btnGrp = dlg.add('group');
-      btnGrp.orientation = 'row';
-      btnGrp.alignChildren = ['fill', 'center'];
-      btnGrp.spacing = 8;
+  btnGrp.orientation = 'row';
+  btnGrp.alignChildren = ['fill', 'center'];
+  btnGrp.spacing = 8;
 
   var cancelBtn, getLicBtn, actBtn;
   if (isMac) {
@@ -420,19 +730,18 @@ function showActivationDialog(statusMsg, isError) {
   getLicBtn.preferredSize.height = 28;
   cancelBtn.preferredSize.height = 28;
 
-  // 4. FOOTER (MI Creative Studio ক্লিক করলে Blogspot ওপেন হবে)
   var footGrp = dlg.add('group');
-      footGrp.orientation = 'row';
-      footGrp.alignChildren = ['fill', 'center'];
+  footGrp.orientation = 'row';
+  footGrp.alignChildren = ['fill', 'center'];
 
-  var brandTag = footGrp.add('statictext', undefined, 'MI Creative Studio');
-      brandTag.justify = 'left';
-      brandTag.graphics.font = ScriptUI.newFont(brandTag.graphics.font.name, 'BOLD', 9.5);
-      setupActionLink(brandTag, function () { openURL(LICENSE_CFG.supportUrl); }, true);
+  var brandTag = footGrp.add('statictext', undefined, 'GitHub: mujahidul80');
+  brandTag.justify = 'left';
+  brandTag.graphics.font = ScriptUI.newFont(brandTag.graphics.font.name, 'BOLD', 9.5);
+  setupActionLink(brandTag, function () { openURL(LICENSE_CFG.profileUrl); }, true);
 
   var getLicLink = footGrp.add('statictext', undefined, 'Get License Key \u2726');
-      getLicLink.justify = 'right';
-      getLicLink.graphics.font = ScriptUI.newFont(getLicLink.graphics.font.name, 'BOLD', 9.5);
+  getLicLink.justify = 'right';
+  getLicLink.graphics.font = ScriptUI.newFont(getLicLink.graphics.font.name, 'BOLD', 9.5);
 
   function triggerGetLicense() {
     dlg.close();
@@ -450,7 +759,7 @@ function showActivationDialog(statusMsg, isError) {
   actBtn.onClick = function () {
     var val = keyInp.text.replace(/^\s+|\s+$/g, '');
     if (!val) {
-      alert('Please enter your License Key or click "Get License".', 'Ai2Psd_Pro');
+      alert('Please enter your Pro License Key or click "Get License".', 'Ai2Psd_Pro');
       return;
     }
     actBtn.text = 'Verifying...';
@@ -466,125 +775,74 @@ function showActivationDialog(statusMsg, isError) {
   };
 
   dlg.show();
+  keepIllustratorFocused();
   return actionResult;
 }
 
 /**
- * অনলাইন সার্ভার কমিউনিকেশন
+ * ফাস্ট এবং হ্যাং-ফ্রি সার্ভার কমিউনিকেশন
  */
 function callLicenseServer(queryParams) {
-  var isMac = /mac/i.test($.os);
-  var outFile = new File(Folder.temp + '/ai2psd_pro_res.json');
-  var doneFile = new File(Folder.temp + '/ai2psd_pro_done.flag');
-  if (outFile.exists) outFile.remove();
-  if (doneFile.exists) doneFile.remove();
-
   var fullUrl = LICENSE_CFG.apiUrl + '?' + queryParams;
+  var raw = fetchUrlContent(fullUrl);
 
-  if (isMac) {
-    var shFile = new File(Folder.temp + '/ai2psd_pro_req.sh');
-    shFile.open('w');
-    shFile.writeln('#!/bin/bash');
-    shFile.writeln('curl -s -L "' + fullUrl + '" -o "' + outFile.fsName + '"');
-    shFile.writeln('echo "done" > "' + doneFile.fsName + '"');
-    shFile.close();
-    shFile.execute();
-
-    for (var m = 0; m < 100; m++) {
-      $.sleep(150);
-      if (doneFile.exists) break;
-    }
-    if (shFile.exists) shFile.remove();
-    if (doneFile.exists) doneFile.remove();
-  } else {
-    var vbsFile = new File(Folder.temp + '/ai2psd_pro_req.vbs');
-    vbsFile.open('w');
-    vbsFile.writeln('On Error Resume Next');
-    vbsFile.writeln('Set http = CreateObject("MSXML2.ServerXMLHTTP.6.0")');
-    vbsFile.writeln('http.setTimeouts 5000, 5000, 10000, 15000');
-    vbsFile.writeln('http.Open "GET", "' + fullUrl + '", False');
-    vbsFile.writeln('http.Send');
-    vbsFile.writeln('Set fso = CreateObject("Scripting.FileSystemObject")');
-    vbsFile.writeln('Set f = fso.CreateTextFile("' + outFile.fsName + '", True, True)');
-    vbsFile.writeln('If Err.Number = 0 And http.Status = 200 Then');
-    vbsFile.writeln('  f.Write http.responseText');
-    vbsFile.writeln('Else');
-    vbsFile.writeln('  f.Write "{""status"":""net_error"",""message"":""Connection Error (" & http.Status & "): " & Replace(Err.Description, """", "") & """}"');
-    vbsFile.writeln('End If');
-    vbsFile.writeln('f.Close');
-    vbsFile.writeln('Set flag = fso.CreateTextFile("' + doneFile.fsName + '", True)');
-    vbsFile.writeln('flag.Write "1"');
-    vbsFile.writeln('flag.Close');
-    vbsFile.close();
-
-    vbsFile.execute();
-
-    for (var w = 0; w < 150; w++) {
-      $.sleep(100);
-      if (doneFile.exists) break;
-    }
-    if (vbsFile.exists) vbsFile.remove();
-    if (doneFile.exists) doneFile.remove();
-  }
-
-  if (outFile.exists) {
-    outFile.encoding = isMac ? 'UTF-8' : 'UTF-16';
-    outFile.open('r');
-    var raw = outFile.read().replace(/^\uFEFF/, '').replace(/^\s+|\s+$/g, '');
-    outFile.close();
-    outFile.remove();
-
+  if (raw) {
     try {
       var parsed = new Function('return (' + raw + ')')();
       if (parsed && parsed.status) {
         return parsed;
       }
     } catch (e) {
-      return {
-        status: 'net_error',
-        message: 'Unexpected response from license server.'
-      };
+      return { status: 'net_error', message: 'Invalid response from server.' };
     }
   }
 
-  return {
-    status: 'net_error',
-    message: 'Unable to reach activation server. Please check your internet connection.'
-  };
+  return { status: 'net_error', message: 'No internet connection.' };
 }
 
 /**
- * লাইসেন্স ম্যানেজার (৭ দিন অটো-চেক + সেলফ-রেজিস্ট্রেশন)
+ * লাইসেন্স ভেরিফিকেশন (HWID ম্যাচিং + অফলাইন গ্রেস সাপোর্ট)
  */
 function verifyLicense() {
   var saved = readLicenseData();
   var now = new Date().getTime();
-  var sevenDaysMs = LICENSE_CFG.checkIntervalDays * 24 * 60 * 60 * 1000;
+  var checkIntervalMs = LICENSE_CFG.checkIntervalDays * 24 * 60 * 60 * 1000;
+  var graceMs = LICENSE_CFG.offlineGraceDays * 24 * 60 * 60 * 1000;
+
+  var currentHwid = getMachineHWID(null);
 
   if (saved && saved.key && saved.lastCheck) {
-    var lastTime = parseFloat(saved.lastCheck);
-    if (!isNaN(lastTime) && (now - lastTime) < sevenDaysMs) {
-      return true;
+    if (saved.hwid !== currentHwid) {
+      removeLicenseData();
+      var reactivated = handleActivationFlow('Workstation mismatch detected. Please activate on this PC:', true, currentHwid, now);
+      return { valid: reactivated, mode: 'online' };
     }
-  }
 
-  var hwid = getMachineHWID();
+    var lastTime = parseFloat(saved.lastCheck);
+    if (!isNaN(lastTime) && (now - lastTime) < checkIntervalMs) {
+      return { valid: true, mode: 'cached' };
+    }
 
-  if (saved && saved.key) {
-    var recheckRes = callLicenseServer('action=verify&key=' + encodeURIComponent(saved.key) + '&hwid=' + encodeURIComponent(hwid));
+    var recheckRes = callLicenseServer('action=verify&key=' + encodeURIComponent(saved.key) + '&hwid=' + encodeURIComponent(currentHwid));
     if (recheckRes.status === 'valid') {
-      saveLicenseData(saved.key, now);
-      return true;
+      saveLicenseData(saved.key, now, currentHwid);
+      return { valid: true, mode: 'online' };
     } else if (recheckRes.status === 'error') {
       removeLicenseData();
-      return handleActivationFlow('7-Day Verification Failed: ' + recheckRes.message + '\nPlease enter a valid/renewed key:', true, hwid, now);
+      var renewed = handleActivationFlow('License Verification Failed: ' + recheckRes.message + '\nPlease enter a valid Pro key:', true, currentHwid, now);
+      return { valid: renewed, mode: 'online' };
     } else {
-      alert('7-Day Periodic Verification Required:\n' + recheckRes.message, 'Ai2Psd_Pro');
-      return false;
+      if ((now - lastTime) < (checkIntervalMs + graceMs)) {
+        return { valid: true, mode: 'offline' };
+      } else {
+        alert('Online License Sync Required.\nPlease connect to the internet once to verify your Pro License.', 'Ai2Psd_Pro');
+        return { valid: false, mode: 'offline_expired' };
+      }
     }
   }
 
-  return handleActivationFlow(null, false, hwid, now);
+  var activated = handleActivationFlow(null, false, currentHwid, now);
+  return { valid: activated, mode: 'online' };
 }
 
 function handleActivationFlow(initialMsg, isError, hwid, now) {
@@ -595,29 +853,31 @@ function handleActivationFlow(initialMsg, isError, hwid, now) {
     var action = showActivationDialog(msg, errState);
     if (!action) return false;
 
-    if (action.mode === 'reopen') {
-      continue;
-    }
+    if (action.mode === 'reopen') continue;
 
     if (action.mode === 'register') {
       var regRes = callLicenseServer('action=register&name=' + encodeURIComponent(action.value) + '&hwid=' + encodeURIComponent(hwid));
       if (regRes.status === 'valid' && regRes.key) {
-        saveLicenseData(regRes.key, now);
-        alert(regRes.message || ('Activated! Your License Key: ' + regRes.key), 'Ai2Psd_Pro');
+        saveLicenseData(regRes.key, now, hwid);
+        keepIllustratorFocused();
+        alert(regRes.message || ('Pro License Activated!\nYour Key: ' + regRes.key), 'Ai2Psd_Pro');
+        keepIllustratorFocused();
         return true;
       } else {
-        msg = regRes.message || 'Registration failed. Please try again.';
+        msg = regRes.message || 'Registration failed. Check your internet connection.';
         errState = true;
       }
     } else if (action.mode === 'activate') {
       var verRes = callLicenseServer('action=verify&key=' + encodeURIComponent(action.value) + '&hwid=' + encodeURIComponent(hwid));
       if (verRes.status === 'valid') {
-        saveLicenseData(action.value, now);
+        saveLicenseData(action.value, now, hwid);
+        keepIllustratorFocused();
         alert(verRes.message || 'Ai2Psd_Pro has been activated successfully!', 'Ai2Psd_Pro');
+        keepIllustratorFocused();
         return true;
       } else {
-        removeLicenseData();
-        msg = verRes.message || 'Invalid License Key. Please try again.';
+        if (verRes.status === 'error') removeLicenseData();
+        msg = verRes.message || 'Invalid Pro License Key or No Internet.';
         errState = true;
       }
     }
@@ -626,13 +886,20 @@ function handleActivationFlow(initialMsg, isError, hwid, now) {
 // ==========================================
 
 function main() {
-  if (!verifyLicense()) {
+  var licCheck = verifyLicense();
+  if (!licCheck || !licCheck.valid) {
     return;
   }
 
+  // ব্যাকগ্রাউন্ডে নীরবে আপডেট চেক করবে (প্রতি ৭ দিন পর পর)
+  checkSoftwareUpdateSilent();
+
+  // Illustrator উইন্ডো ফোকাসে রাখা
+  keepIllustratorFocused();
+
   var SCRIPT = {
     name: 'Ai2Psd_Pro',
-    version: 'v4.5'
+    version: 'v' + LICENSE_CFG.currentVersion
   };
 
   var CFG = {
@@ -650,14 +917,20 @@ function main() {
   };
 
   var LANG = {
-    errApp: { en: 'Wrong application\nRun script from Adobe Illustrator',
-              ru: 'Неправильная программа\nЗапустите скрипт в Adobe Illustrator' },
-    errVer: { en: 'Wrong app version\nSorry, script only works in Illustrator CS6 and later',
-              ru: 'Неподходящая версия\nСкрипт работает в Illustrator CS6 и выше' },
-    errScale: { en: 'UI Scaling\nDue to scaling Preferences > User Interface > UI Scaling ' + 
-                    'the Resolution dropdown list will not display correctly',
-              ru: 'UI Scaling\nИз-за масштабирования Preferences > User Interface > UI Scaling ' + 
-                  'выпадающий список Resolution отобразится некорректно' },
+    errApp: {
+      en: 'Wrong application\nRun script from Adobe Illustrator',
+      ru: 'Неправильная программа\nЗапустите скрипт в Adobe Illustrator'
+    },
+    errVer: {
+      en: 'Wrong app version\nSorry, script only works in Illustrator CS6 and later',
+      ru: 'Неподходящая версия\nСкрипт работает в Illustrator CS6 и выше'
+    },
+    errScale: {
+      en: 'UI Scaling\nDue to scaling Preferences > User Interface > UI Scaling ' +
+        'the Resolution dropdown list will not display correctly',
+      ru: 'UI Scaling\nИз-за масштабирования Preferences > User Interface > UI Scaling ' +
+        'выпадающий список Resolution отобразится некорректно'
+    },
     src: { en: 'Source', ru: 'Источник' },
     actDoc: { en: 'Active Document: ', ru: 'Текущий документ: ' },
     allDoc1: { en: 'All ', ru: 'Все ' },
@@ -680,17 +953,19 @@ function main() {
     rangeTip: { en: 'Range: 72-2400 ppi', ru: 'Диапазон: 72-2400 ppi' },
     model: { en: 'Color Space', ru: 'Цветовая модель' },
     docCol: { en: 'Doc color', ru: 'Документа' },
-    opts: { en: 'Shape Options', ru: 'Настройки фигур' },
-    expandComp: { en: 'Expand Compound Shapes to Solid (No extra merge needed)', ru: 'Разобрать составные фигуры в сплошные' },
+    opts: { en: 'Shape & Effect Options', ru: 'Настройки фигур' },
+    expandComp: { en: 'Expand Solid Shapes (Preserves Blur & Effects)', ru: 'Разобрать составные фигуры в сплошные' },
     of: { en: ' of ', ru: ' из ' },
     cancel: { en: 'Cancel', ru: 'Закрыть' },
     ok: { en: 'Export', ru: 'Экспортировать' },
     brand: { en: 'MI Creative Studio', ru: 'MI Creative Studio' },
     licStatus: { en: 'Pro Licensed \u2713', ru: 'Pro Licensed \u2713' },
-    done: { en: 'Exporting process is complete!\n'
-          + 'Open documents have been changed. To restore the last save select File > Revert.',
-          ru: 'Экспорт завершен!\n'
-          + 'Открытые документы были изменены. Для восстановления выберите Файл > Восстановить.' }
+    done: {
+      en: 'Exporting process is complete!\n'
+        + 'Open documents have been changed. To restore the last save select File > Revert.',
+      ru: 'Экспорт завершен!\n'
+        + 'Открытые документы были изменены. Для восстановления выберите Файл > Восстановить.'
+    }
   };
 
   var SETTINGS = {
@@ -718,137 +993,134 @@ function main() {
 
   // DIALOG
   var win = new Window('dialog', SCRIPT.name + ' ' + SCRIPT.version);
-      win.orientation = 'column';
-      win.alignChildren = ['fill', 'top'];
-      win.spacing = 10;
+  win.orientation = 'column';
+  win.alignChildren = ['fill', 'top'];
+  win.spacing = 10;
 
-  // BRAND HEADER IN MAIN WINDOW + SMALL SUPPORT BUTTON
   var topBrandGrp = win.add('group');
-      topBrandGrp.orientation = 'row';
-      topBrandGrp.alignChildren = ['fill', 'center'];
-      topBrandGrp.spacing = 8;
+  topBrandGrp.orientation = 'row';
+  topBrandGrp.alignChildren = ['fill', 'center'];
+  topBrandGrp.spacing = 8;
 
   var topLeft = topBrandGrp.add('group');
-      topLeft.orientation = 'row';
-      topLeft.alignChildren = ['left', 'center'];
-      topLeft.spacing = 8;
+  topLeft.orientation = 'row';
+  topLeft.alignChildren = ['left', 'center'];
+  topLeft.spacing = 8;
 
   drawBrandLogo(topLeft, 26);
 
-  var topTitle = topLeft.add('statictext', undefined, 'Ai2Psd_Pro  |  PSD Exporter');
-      topTitle.graphics.font = ScriptUI.newFont(topTitle.graphics.font.name, 'BOLD', 11);
+  var topTitle = topLeft.add('statictext', undefined, 'Ai2Psd_Pro  |  Pro PSD Engine');
+  topTitle.graphics.font = ScriptUI.newFont(topTitle.graphics.font.name, 'BOLD', 11);
 
   var mainSupBtn = topBrandGrp.add('button', undefined, 'Support');
-      mainSupBtn.preferredSize = [52, 20];
-      mainSupBtn.graphics.font = ScriptUI.newFont(mainSupBtn.graphics.font.name, 'REGULAR', 8.5);
-      mainSupBtn.onClick = function () { openURL(LICENSE_CFG.supportUrl); };
+  mainSupBtn.preferredSize = [56, 20];
+  mainSupBtn.graphics.font = ScriptUI.newFont(mainSupBtn.graphics.font.name, 'REGULAR', 8.5);
+  mainSupBtn.onClick = function () { openURL(LICENSE_CFG.repoUrl); };
 
   // SOURCE PANEL
   var srcPnl = win.add('panel', undefined, LANG.src);
-      srcPnl.alignChildren = 'fill';
-      srcPnl.margins = CFG.mgns;
+  srcPnl.alignChildren = 'fill';
+  srcPnl.margins = CFG.mgns;
 
   var actDocRb = srcPnl.add('radiobutton', undefined, LANG.actDoc);
-      actDocRb.text += hasOpenDoc() ? truncate(doc.name, 23) : LANG.noDoc;
-      actDocRb.value = true;
+  actDocRb.text += hasOpenDoc() ? truncate(doc.name, 23) : LANG.noDoc;
+  actDocRb.value = true;
   var allDocRb = srcPnl.add('radiobutton', undefined, LANG.allDoc1 + documents.length + LANG.allDoc2);
-      allDocRb.text = hasOpenDoc() ? LANG.allDoc1 + documents.length + LANG.allDoc2 : LANG.noDoc;
-      allDocRb.enabled = documents.length > 1;
+  allDocRb.text = hasOpenDoc() ? LANG.allDoc1 + documents.length + LANG.allDoc2 : LANG.noDoc;
+  allDocRb.enabled = documents.length > 1;
 
   // FOLDER
   var folGrp = srcPnl.add('group');
-      folGrp.alignChildren = ['left', 'center'];
+  folGrp.alignChildren = ['left', 'center'];
   var folRb = folGrp.add('radiobutton', undefined, LANG.fol);
   var folBtn = folGrp.add('button', undefined, LANG.sel);
-      folBtn.preferredSize.height = 24;
+  folBtn.preferredSize.height = 24;
   var isSubfol = srcPnl.add('checkbox', undefined, LANG.subfol);
-      isSubfol.enabled = folBtn.value;
+  isSubfol.enabled = folBtn.value;
   var folLbl = srcPnl.add('statictext', undefined, Folder.desktop);
-      folLbl.preferredSize.width = 160;
+  folLbl.preferredSize.width = 160;
 
   // ARTBOARDS PANEL
   var abPnl = win.add('panel', undefined, LANG.abs);
-      abPnl.alignChildren = ['fill', 'center'];
-      abPnl.margins = CFG.mgns;
+  abPnl.alignChildren = ['fill', 'center'];
+  abPnl.margins = CFG.mgns;
 
   var isSaveAbs = abPnl.add('checkbox', undefined, LANG.multiAbs);
-      isSaveAbs.value = true;
+  isSaveAbs.value = true;
 
   var abGrp = abPnl.add('group');
-      abGrp.alignChildren = ['fill', 'top'];
-      abGrp.orientation = 'column';
+  abGrp.alignChildren = ['fill', 'top'];
+  abGrp.orientation = 'column';
 
   var allAbRb = abGrp.add('radiobutton', undefined, LANG.allAbs);
-      allAbRb.value = true;
+  allAbRb.value = true;
   var actAbRb = abGrp.add('radiobutton', undefined, LANG.actAb);
 
   // RANGE
   var rangeGrp = abGrp.add('group');
-      rangeGrp.alignChildren = ['left', 'center'];
+  rangeGrp.alignChildren = ['left', 'center'];
 
   var rangeAbRb = rangeGrp.add('radiobutton', undefined, LANG.range);
-      rangeAbRb.preferredSize.width = CFG.isRU ? 85 : 60;
+  rangeAbRb.preferredSize.width = CFG.isRU ? 85 : 60;
   var rangeInp = rangeGrp.add('edittext', undefined, '1,2');
-      rangeInp.characters = 12;
-      rangeInp.helpTip = '"1, 3-5" -> 1, 3, 4, 5';
+  rangeInp.characters = 12;
+  rangeInp.helpTip = '"1, 3-5" -> 1, 3, 4, 5';
 
   // TWO COLUMN LAYOUT
   var row = win.add('group');
-      row.alignChildren = ['fill', 'fill'];
+  row.alignChildren = ['fill', 'fill'];
 
-  // RESOLUTION PANEL
   var resPnl = row.add('panel', undefined, LANG.res);
-      resPnl.alignChildren = 'fill';
-      resPnl.margins = CFG.mgns;
+  resPnl.alignChildren = 'fill';
+  resPnl.margins = CFG.mgns;
 
   var ppiList = resPnl.add('dropdownlist', undefined, [LANG.low, LANG.mid, LANG.high, '-', LANG.other]);
-      ppiList.selection = 0;
+  ppiList.selection = 0;
 
   var ppiInp = resPnl.add('edittext', undefined, '96');
-      ppiInp.characters = 5;
+  ppiInp.characters = 5;
   resPnl.add('statictext', undefined, LANG.rangeTip);
 
-  // COLOR MODEL PANEL
   var colPnl = row.add('panel', undefined, LANG.model);
-      colPnl.alignChildren = 'left';
-      colPnl.margins = CFG.mgns;
+  colPnl.alignChildren = 'left';
+  colPnl.margins = CFG.mgns;
 
   var origColRb = colPnl.add('radiobutton', undefined, LANG.docCol);
-      origColRb.value = true;
+  origColRb.value = true;
   var rgbRb = colPnl.add('radiobutton', undefined, 'RGB');
   var cmykRb = colPnl.add('radiobutton', undefined, 'CMYK');
 
   // SHAPE OPTIONS PANEL
   var optPnl = win.add('panel', undefined, LANG.opts);
-      optPnl.alignChildren = 'left';
-      optPnl.margins = CFG.mgns;
+  optPnl.alignChildren = 'left';
+  optPnl.margins = CFG.mgns;
 
   var isExpandComp = optPnl.add('checkbox', undefined, LANG.expandComp);
-      isExpandComp.value = true;
+  isExpandComp.value = true;
 
-  // ENHANCED PROGRESS BAR PANEL
+  // PROGRESS BAR PANEL
   var progPnl = win.add('panel', undefined, 'Progress');
-      progPnl.alignChildren = ['fill', 'center'];
-      progPnl.margins = [10, 12, 10, 10];
+  progPnl.alignChildren = ['fill', 'center'];
+  progPnl.margins = [10, 12, 10, 10];
 
   var progTopGrp = progPnl.add('group');
-      progTopGrp.orientation = 'row';
-      progTopGrp.alignChildren = ['fill', 'center'];
+  progTopGrp.orientation = 'row';
+  progTopGrp.alignChildren = ['fill', 'center'];
 
   var progLbl = progTopGrp.add('statictext', undefined, 'Doc: 1' + LANG.of + '1');
-      progLbl.justify = 'left';
+  progLbl.justify = 'left';
 
   var pctLbl = progTopGrp.add('statictext', undefined, '0%');
-      pctLbl.justify = 'right';
-      pctLbl.preferredSize.width = 50;
+  pctLbl.justify = 'right';
+  pctLbl.preferredSize.width = 50;
 
   var progBar = progPnl.add('progressbar', undefined, 0, 100);
-      progBar.preferredSize.width = 280;
-      progBar.preferredSize.height = 12;
+  progBar.preferredSize.width = 280;
+  progBar.preferredSize.height = 12;
 
   // BUTTONS
   var btns = win.add('group');
-      btns.alignChildren = ['fill', 'fill'];
+  btns.alignChildren = ['fill', 'fill'];
 
   var cancel, ok;
   if (CFG.isMac) {
@@ -859,23 +1131,23 @@ function main() {
     cancel = btns.add('button', undefined, LANG.cancel, { name: 'cancel' });
   }
 
-  // FOOTER (MI Creative Studio clickable -> Blogspot)
+  // FOOTER (Clean Brand & Pro Badge — No Check Update button)
   var copyGrp = win.add('group');
-      copyGrp.orientation = 'row';
-      copyGrp.alignChildren = ['fill', 'center'];
+  copyGrp.orientation = 'row';
+  copyGrp.alignChildren = ['fill', 'center'];
 
   var brandLbl = copyGrp.add('statictext', undefined, '\u00A9 ' + LANG.brand);
-      brandLbl.justify = 'left';
-      setupActionLink(brandLbl, function () { openURL(LICENSE_CFG.supportUrl); }, true);
+  brandLbl.justify = 'left';
+  setupActionLink(brandLbl, function () { openURL(LICENSE_CFG.profileUrl); }, true);
 
   var statusBadge = copyGrp.add('statictext', undefined, LANG.licStatus);
-      statusBadge.justify = 'right';
-      var isDark = app.preferences.getRealPreference('uiBrightness') <= 0.5;
-      statusBadge.graphics.foregroundColor = statusBadge.graphics.newPen(
-        statusBadge.graphics.PenType.SOLID_COLOR,
-        isDark ? [0.25, 0.85, 0.55] : [0.08, 0.55, 0.28],
-        1
-      );
+  statusBadge.justify = 'right';
+  var isDark = app.preferences.getRealPreference('uiBrightness') <= 0.5;
+  statusBadge.graphics.foregroundColor = statusBadge.graphics.newPen(
+    statusBadge.graphics.PenType.SOLID_COLOR,
+    isDark ? [0.25, 0.85, 0.55] : [0.08, 0.55, 0.28],
+    1
+  );
 
   // EVENTS
   actDocRb.onClick = function () {
@@ -883,7 +1155,7 @@ function main() {
     isSubfol.enabled = false;
     actAbRb.enabled = abGrp.enabled;
     progLbl.text = 'Doc: 1' + LANG.of + '1';
-  }
+  };
 
   allDocRb.onClick = function () {
     if (!this.enabled) return;
@@ -892,7 +1164,7 @@ function main() {
     folRb.value = false;
     isSubfol.enabled = false;
     progLbl.text = 'Doc: 1' + LANG.of + app.documents.length;
-  }
+  };
 
   folRb.onClick = function () {
     if (actAbRb.value) {
@@ -904,7 +1176,7 @@ function main() {
     actDocRb.value = allDocRb.value = false;
     actAbRb.enabled = false;
     progLbl.text = 'Doc: 1' + LANG.of + '?';
-  }
+  };
 
   var folPath = '';
   folBtn.onClick = function () {
@@ -917,33 +1189,33 @@ function main() {
       str = '.../' + folPath.substr(folPath.lastIndexOf('/') + 1);
       folLbl.text = truncate(str, 40);
     }
-  }
+  };
 
   isSubfol.onClick = function () {
     if (!folPath.length) return;
     srcFiles = getFolderFiles(folPath, ['ai', 'eps', 'svg'], isSubfol.enabled && isSubfol.value);
     progLbl.text = 'Doc: 1' + LANG.of + srcFiles.length;
-  }
+  };
 
-  isSaveAbs.onClick = function () { 
+  isSaveAbs.onClick = function () {
     abGrp.enabled = this.value;
     actAbRb.enabled = abGrp.enabled && actDocRb.value;
     rangeInp.enabled = rangeAbRb.value;
-  }
+  };
 
   allAbRb.onClick = actAbRb.onClick = function () {
     if (!this.enabled) return;
     rangeAbRb.value = rangeInp.enabled = false;
-  }
+  };
 
-  rangeAbRb.onClick = function () { 
+  rangeAbRb.onClick = function () {
     allAbRb.value = actAbRb.value = false;
     rangeInp.enabled = true;
-  }
+  };
 
   ppiList.onChange = function () {
     ppiInp.enabled = (/other|другое/i.test(this.selection.text));
-  }
+  };
 
   cancel.onClick = win.close;
   ok.onClick = okClick;
@@ -962,11 +1234,24 @@ function main() {
     } else if (allDocRb.value) {
       docs = get(app.documents);
     } else {
+      if (!hasOpenDoc()) {
+        alert(LANG.noDoc, 'Ai2Psd_Pro');
+        return;
+      }
       docs = [app.activeDocument];
     }
 
+    if (!docs.length) {
+      alert('No files found to process!', 'Ai2Psd_Pro');
+      return;
+    }
+
+    ok.enabled = false;
     progLbl.text = 'Doc: 1' + LANG.of + docs.length;
     addCompShapeAction(CFG.actSet, CFG.actName, CFG.actPath);
+
+    var origInteraction = app.userInteractionLevel;
+    app.userInteractionLevel = UserInteractionLevel.DONTDISPLAYALERTS;
 
     try {
       for (var i = 0, len = docs.length; i < len; i++) {
@@ -982,9 +1267,9 @@ function main() {
         }
         currDoc = app.activeDocument;
 
-        try { 
-          process(currDoc, win, progBar, pctLbl, CFG, isExpandComp.value); 
-        } catch (err) {}
+        try {
+          process(currDoc, win, progBar, pctLbl, CFG, isExpandComp.value);
+        } catch (err) { }
 
         currDoc.activate();
 
@@ -995,11 +1280,13 @@ function main() {
           app.activeDocument.close(SaveOptions.DONOTSAVECHANGES);
         }
       }
-    } catch (err) {}
+    } catch (err) { }
+
+    app.userInteractionLevel = origInteraction;
 
     try {
       app.unloadAction(CFG.actSet, '');
-    } catch (err) {}
+    } catch (err) { }
 
     if (isSuccess) alert(LANG.done, 'Ai2Psd_Pro');
     win.close();
@@ -1035,8 +1322,8 @@ function main() {
         f.encoding = 'UTF-8';
         f.open('r');
         var json = f.readln();
-        try { var data = new Function('return (' + json + ')')(); }
-        catch (err) {}
+        var data;
+        try { data = new Function('return (' + json + ')')(); } catch (err) { }
         f.close();
 
         if (typeof data != 'undefined') {
@@ -1047,20 +1334,20 @@ function main() {
           if (data.src == 0) actDocRb.notify('onClick');
           else if (data.src == 1) allDocRb.notify('onClick');
           else folRb.notify('onClick');
-          isSubfol.value = data.subfol === 'true';
-          isSaveAbs.value = data.multi === 'true';
+          isSubfol.value = String(data.subfol) === 'true';
+          isSaveAbs.value = String(data.multi) === 'true';
           if (data.abs == 0) allAbRb.notify('onClick');
           else if (data.abs == 1) actAbRb.notify('onClick');
           else rangeAbRb.notify('onClick');
-          rangeInp.text = data.range;
+          rangeInp.text = data.range || '1,2';
           ppiList.selection = parseInt(data.res) || 0;
-          ppiInp.text = data.ppi;
+          ppiInp.text = data.ppi || '96';
           if (data.color == 0) origColRb.value = true;
           else if (data.color == 1) rgbRb.value = true;
           else cmykRb.value = true;
-          if (data.expand !== undefined) isExpandComp.value = data.expand === 'true';
+          if (data.expand !== undefined) isExpandComp.value = String(data.expand) === 'true';
         }
-      } catch (err) {}
+      } catch (err) { }
     }
 
     if (hasOpenDoc()) {
@@ -1121,6 +1408,7 @@ function main() {
     return opts;
   }
 
+  keepIllustratorFocused();
   win.show();
 }
 
@@ -1136,27 +1424,28 @@ function truncate(str, n) {
 function getFolderFiles(path, extensions, isDeep) {
   var folder = Folder(decodeURI(path));
   var results = [];
+  var filesArr;
   try {
-    var filesArr = folder.getFiles();
-  } catch(err) {
+    filesArr = folder.getFiles();
+  } catch (err) {
     return [];
   }
 
   var currFile = null;
-  var regex = new RegExp(extensions.join('|'));
+  var regex = new RegExp('\\.(' + extensions.join('|') + ')$', 'i');
 
   for (var i = 0, len = filesArr.length; i < len; i++) {
     currFile = filesArr[i];
     try {
       if (isDeep && currFile instanceof Folder) {
-        results = results.concat(getFolderFiles(currFile, extensions, isDeep));
+        var subFiles = getFolderFiles(currFile, extensions, isDeep);
+        for (var s = 0; s < subFiles.length; s++) results.push(subFiles[s]);
       } else if (currFile instanceof File) {
-        if (!/^\._|ds_store/.test(currFile.name) &&
-            regex.test(/\.[^\.]+$/g.exec(currFile.name.toLowerCase())[0])) {
+        if (!/^\._|ds_store/i.test(currFile.name) && regex.test(currFile.name)) {
           results.push(currFile);
         }
       }
-    } catch(err) {}
+    } catch (err) { }
   }
   return results;
 }
@@ -1168,31 +1457,31 @@ function addCompShapeAction(set, name, path) {
     '/isOpen 1',
     '/actionCount 1',
     '/action-1 {',
-        '/name [' + name.length + ' ' + ascii2Hex(name) + ']',
-        '/keyIndex 0',
-        '/colorIndex 0',
-        '/isOpen 1',
-        '/eventCount 1',
-        '/event-1 {',
-            '/useRulersIn1stQuadrant 0',
-            '/internalName (ai_make_compound_shape)',
-            '/localizedName [ 19',
-            '    4d616b6520436f6d706f756e64205368617065',
-            ']',
-            '/isOpen 0',
-            '/isOn 1',
-            '/hasDialog 0',
-            '/parameterCount 1',
-            '/parameter-1 {',
-                '/key 1835101029',
-                '/showInPalette 4294967295',
-                '/type (integer)',
-                '/value 0',
-            '}',
-        '}',
+    '/name [' + name.length + ' ' + ascii2Hex(name) + ']',
+    '/keyIndex 0',
+    '/colorIndex 0',
+    '/isOpen 1',
+    '/eventCount 1',
+    '/event-1 {',
+    '/useRulersIn1stQuadrant 0',
+    '/internalName (ai_make_compound_shape)',
+    '/localizedName [ 19',
+    '    4d616b6520436f6d706f756e64205368617065',
+    ']',
+    '/isOpen 0',
+    '/isOn 1',
+    '/hasDialog 0',
+    '/parameterCount 1',
+    '/parameter-1 {',
+    '/key 1835101029',
+    '/showInPalette 4294967295',
+    '/type (integer)',
+    '/value 0',
+    '}',
+    '}',
     '}'].join('');
 
-  try { app.unloadAction(set, ''); } catch (err) {}
+  try { app.unloadAction(set, ''); } catch (err) { }
   createAction(str, set, path);
 }
 
@@ -1207,7 +1496,7 @@ function createAction(str, set, path) {
 }
 
 function ascii2Hex(hex) {
-  return hex.replace(/./g, function(a) {
+  return hex.replace(/./g, function (a) {
     return a.charCodeAt(0).toString(16);
   });
 }
@@ -1228,15 +1517,28 @@ function process(doc, w, pb, pctLbl, pref, expandToSolid) {
   unlockAll(doc);
   limitGroupDepth(doc.layers, 2);
 
+  app.selection = null;
   app.executeMenuCommand('selectall');
-  var docItems = getItems(app.selection);
-  var len = docItems.length;
 
-  var updateStep = Math.max(1, Math.floor(len / 20)); 
+  var docItems = [];
+  collectItemsFast(app.selection, docItems);
+  app.selection = null;
+
+  var len = docItems.length;
+  if (len === 0) {
+    pb.value = 100;
+    pctLbl.text = '100%';
+    w.update();
+    return;
+  }
+
+  var updateStep = Math.max(1, Math.floor(len / 10));
 
   for (var i = len - 1; i >= 0; i--) {
     var item = docItems[i];
-    convertItem(item, pref.actName, pref.actSet, expandToSolid);
+    if (item && item.typename) {
+      convertItemFast(item, pref.actName, pref.actSet, expandToSolid);
+    }
 
     var processedCount = len - i;
     if (processedCount % updateStep === 0 || i === 0) {
@@ -1254,9 +1556,55 @@ function process(doc, w, pb, pctLbl, pref, expandToSolid) {
   w.update();
 }
 
+function hasLiveEffect(item) {
+  if (!item) return false;
+  try {
+    if (item.hasOwnProperty('isIsolated') && item.isIsolated) return true;
+    if (item.artworkKnockout && item.artworkKnockout !== KnockoutState.DISABLED) return true;
+    if (item.visibleBounds && item.geometricBounds) {
+      var vb = item.visibleBounds;
+      var gb = item.geometricBounds;
+      var tol = 0.5;
+      if (Math.abs(vb[0] - gb[0]) > tol ||
+        Math.abs(vb[1] - gb[1]) > tol ||
+        Math.abs(vb[2] - gb[2]) > tol ||
+        Math.abs(vb[3] - gb[3]) > tol) {
+        return true;
+      }
+    }
+  } catch (e) { }
+  return false;
+}
+
+function collectItemsFast(coll, results) {
+  if (!coll || !coll.length) return;
+  for (var i = 0, len = coll.length; i < len; i++) {
+    var item = coll[i];
+    if (!item || item.locked || item.hidden) continue;
+
+    if (hasLiveEffect(item)) {
+      results.push(item);
+      continue;
+    }
+
+    if (item.pageItems && item.pageItems.length) {
+      if (item.clipped) {
+        results.push(item);
+      } else {
+        collectItemsFast(item.pageItems, results);
+      }
+    } else if (isType(item, 'compound')) {
+      if (item.pathItems.length && item.pathItems[0].clipping) continue;
+      results.push(item);
+    } else if (!item.clipping) {
+      results.push(item);
+    }
+  }
+}
+
 function unlockAll(doc) {
   unlockLayers(doc.layers);
-  app.executeMenuCommand('unlockAll');
+  try { app.executeMenuCommand('unlockAll'); } catch (e) { }
   app.selection = null;
 }
 
@@ -1281,31 +1629,35 @@ function limitGroupDepth(layers, depth) {
 
 function groupNormalize(groups, max, counter, dest) {
   var i = groups.length;
-  var counter = (counter || 0) + 1;
+  counter = (counter || 0) + 1;
   if (i > 0) {
     while (i--) {
       if (counter > max) {
-        try { var dest = groups[i]; } catch (err) {}
+        try { dest = groups[i]; } catch (err) { }
         try {
-          if (!groups[i].clipped) {
+          if (!groups[i].clipped && !hasLiveEffect(groups[i])) {
             moveItems(groups[i].pageItems, dest);
           } else {
             ungroupAll(groups[i]);
           }
-        } catch (err) {}
+        } catch (err) { }
         groupNormalize(groups, max, counter - 1, dest);
       } else {
         try {
           groupNormalize(groups[i].groupItems, max, counter, dest);
-        } catch (err) {}
+        } catch (err) { }
       }
     }
   }
 }
 
 function ungroupAll(obj) {
+  if (hasLiveEffect(obj)) return;
   var childs = getGroupChilds(obj);
-  if (!childs.length) obj.remove();
+  if (!childs.length) {
+    try { obj.remove(); } catch (e) { }
+    return;
+  }
 
   for (var i = 0, len = childs.length; i < len; i++) {
     var item = childs[i];
@@ -1316,7 +1668,7 @@ function ungroupAll(obj) {
       if (isType(item, 'group|layer')) {
         ungroupAll(item);
       }
-    } catch (err) {}
+    } catch (err) { }
   }
 }
 
@@ -1346,35 +1698,22 @@ function moveItems(items, dest) {
   return groups;
 }
 
-function getItems(coll) {
-  var results = [];
-  for (var i = 0, len = coll.length; i < len; i++) {
-    var item = coll[i];
-    if (item.pageItems && item.pageItems.length) {
-      results = [].concat(results, getItems(item.pageItems));
-    } else if (isType(item, 'compound')) {
-      if (item.pathItems.length && item.pathItems[0].clipping) continue;
-      results.push(item);
-    } else if (!item.clipping) {
-      results.push(item);
-    }
-  }
-  return results;
-}
-
 function isType(item, type) {
+  if (!item || !item.typename) return false;
   var regexp = new RegExp(type, 'i');
   return regexp.test(item.typename);
 }
 
-function convertItem(item, actName, actSet, expandToSolid) {
+function convertItemFast(item, actName, actSet, expandToSolid) {
   var props = {
     name: transliterate(getName(item)),
     opa: item.opacity,
     blend: item.blendingMode
   };
   var prnt = item.parent;
-  prnt.name = transliterate(getName(prnt));
+  if (prnt && prnt.name !== undefined) {
+    prnt.name = transliterate(getName(prnt));
+  }
 
   if (isType(prnt, 'group') && prnt.pageItems.length === 1) {
     props.opa = prnt.opacity;
@@ -1386,6 +1725,13 @@ function convertItem(item, actName, actSet, expandToSolid) {
     return;
   }
 
+  if (isType(item, 'group') && item.clipped) {
+    if (!isEmpty(props.name)) item.name = props.name;
+    return;
+  }
+
+  var itemHasBlurOrEffect = hasLiveEffect(item) || (isType(item.parent, 'compound') && hasLiveEffect(item.parent));
+
   var tmpPath;
   if (isType(item, 'compound')) {
     if (item.pathItems.length) {
@@ -1396,11 +1742,13 @@ function convertItem(item, actName, actSet, expandToSolid) {
     }
   }
 
-  item.fillOverprint = false;
-  item.strokeOverprint = false;
+  try {
+    item.fillOverprint = false;
+    item.strokeOverprint = false;
+  } catch (e) { }
 
   try {
-    if (!isProblemType(item) && isSolidFill(item) && !item.stroked) {
+    if (!itemHasBlurOrEffect && !isProblemType(item) && isSolidFill(item) && !item.stroked) {
       if (isType(item.parent, 'compound')) {
         item = item.parent;
         if (tmpPath) tmpPath.remove();
@@ -1410,13 +1758,13 @@ function convertItem(item, actName, actSet, expandToSolid) {
       app.doScript(actName, actSet);
 
       if (!app.selection.length) {
-        try { app.selection = [item]; } catch (err) {}
+        try { app.selection = [item]; } catch (err) { }
       }
 
       if (expandToSolid && app.selection.length) {
         try {
           app.executeMenuCommand('expandStyle');
-        } catch (err) {}
+        } catch (err) { }
       }
 
       if (app.selection.length) {
@@ -1430,15 +1778,20 @@ function convertItem(item, actName, actSet, expandToSolid) {
         if (tmpPath) tmpPath.remove();
       }
 
-      var safeGrp = item.layer.groupItems.add();
-      safeGrp.move(item, ElementPlacement.PLACEBEFORE);
-      item.move(safeGrp, ElementPlacement.PLACEATEND);
-      if (!isEmpty(props.name)) safeGrp.name = props.name;
+      if (isType(item, 'group')) {
+        if (!isEmpty(props.name)) item.name = props.name;
+      } else {
+        var safeGrp = item.layer.groupItems.add();
+        safeGrp.move(item, ElementPlacement.PLACEBEFORE);
+        item.move(safeGrp, ElementPlacement.PLACEATEND);
+        if (!isEmpty(props.name)) safeGrp.name = props.name;
+      }
     }
-  } catch (err) {}
+  } catch (err) { }
 }
 
 function transliterate(str) {
+  if (!str) return '';
   var tlStr = '';
   var cyrillicMap = {
     'Ё': 'YO', 'Й': 'I', 'Ц': 'TS', 'У': 'U', 'К': 'K', 'Е': 'E', 'Н': 'N', 'Г': 'G', 'Ґ': 'G', 'Ш': 'SH', 'Щ': 'SCH', 'З': 'Z', 'Х': 'H', 'Ъ': "'",
@@ -1492,12 +1845,13 @@ function getCompound(item) {
 }
 
 function isLegacyText(item) {
-  return item.typename === 'LegacyTextItem' || 
-        (item.typename === 'TextFrame' && (!item.hasOwnProperty('contents') ||
-        item.hasOwnProperty('converted')));
+  return item.typename === 'LegacyTextItem' ||
+    (item.typename === 'TextFrame' && (!item.hasOwnProperty('contents') ||
+      item.hasOwnProperty('converted')));
 }
 
 function isEmpty(str) {
+  if (!str) return true;
   return str.replace(/\s/g, '').length === 0;
 }
 
