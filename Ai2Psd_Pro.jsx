@@ -14,7 +14,7 @@ $.localize = true;
 // GOOGLE SCRIPT & GITHUB CONFIGURATION
 // ==========================================
 var LICENSE_CFG = {
-  currentVersion: '5.2',
+  currentVersion: '5.3',
   apiUrl: 'https://script.google.com/macros/s/AKfycby9-GyRG5SWyUvoUHuEhtX_DY0n8KjEH_M8TYMAF3eCYpRnED9mJXNyE5hrIZ-FwCQr/exec',
   versionUrl: 'https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/version.json',
   installCmd: 'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/install.ps1 | iex"',
@@ -134,12 +134,12 @@ function fetchUrlContent(targetUrl) {
     var shFile = new File(Folder.temp + '/ai2psd_req_' + uid + '.sh');
     shFile.open('w');
     shFile.writeln('#!/bin/bash');
-    shFile.writeln('curl -s -L --connect-timeout 4 --max-time 5 "' + targetUrl + '" -o "' + outFile.fsName + '"');
+    shFile.writeln('curl -s -L --connect-timeout 4 --max-time 6 "' + targetUrl + '" -o "' + outFile.fsName + '"');
     shFile.writeln('echo "done" > "' + doneFile.fsName + '"');
     shFile.close();
     shFile.execute();
 
-    for (var m = 0; m < 50; m++) {
+    for (var m = 0; m < 60; m++) {
       $.sleep(100);
       if (doneFile.exists) break;
     }
@@ -150,26 +150,32 @@ function fetchUrlContent(targetUrl) {
     vbsFile.open('w');
     vbsFile.writeln('On Error Resume Next');
     vbsFile.writeln('Set http = CreateObject("WinHttp.WinHttpRequest.5.1")');
-    vbsFile.writeln('http.SetTimeouts 2500, 2500, 4000, 4000');
-    vbsFile.writeln('http.Open "GET", "' + targetUrl + '", False');
+    vbsFile.writeln('http.SetTimeouts 3000, 3000, 5000, 5000');
+    vbsFile.writeln('http.Open "GET", "' + targetUrl.replace(/"/g, '""') + '", False');
     vbsFile.writeln('http.Send');
     vbsFile.writeln('Set fso = CreateObject("Scripting.FileSystemObject")');
-    vbsFile.writeln('Set f = fso.CreateTextFile("' + outFile.fsName + '", True, True)');
+    vbsFile.writeln('Set f = fso.CreateTextFile("' + outFile.fsName.replace(/\\/g, '\\\\') + '", True, True)');
     vbsFile.writeln('If Err.Number = 0 And http.Status = 200 Then');
     vbsFile.writeln('  f.Write http.responseText');
     vbsFile.writeln('End If');
     vbsFile.writeln('f.Close');
-    vbsFile.writeln('Set flag = fso.CreateTextFile("' + doneFile.fsName + '", True)');
+    vbsFile.writeln('Set flag = fso.CreateTextFile("' + doneFile.fsName.replace(/\\/g, '\\\\') + '", True)');
     vbsFile.writeln('flag.Write "1"');
     vbsFile.writeln('flag.Close');
     vbsFile.close();
 
-    vbsFile.execute();
+    var batFile = new File(Folder.temp + '/ai2psd_req_' + uid + '.bat');
+    batFile.open('w');
+    batFile.writeln('@echo off');
+    batFile.writeln('cscript //nologo "' + vbsFile.fsName + '" >nul 2>&1');
+    batFile.close();
+    batFile.execute();
 
-    for (var w = 0; w < 45; w++) {
+    for (var w = 0; w < 50; w++) {
       $.sleep(100);
       if (doneFile.exists) break;
     }
+    if (batFile.exists) batFile.remove();
     if (vbsFile.exists) vbsFile.remove();
     if (doneFile.exists) doneFile.remove();
     keepIllustratorFocused();
@@ -177,11 +183,13 @@ function fetchUrlContent(targetUrl) {
 
   var content = '';
   if (outFile.exists) {
-    outFile.encoding = isMac ? 'UTF-8' : 'UTF-16';
-    outFile.open('r');
-    content = outFile.read().replace(/^\uFEFF/, '').replace(/^\s+|\s+$/g, '');
-    outFile.close();
-    outFile.remove();
+    try {
+      outFile.encoding = isMac ? 'UTF-8' : 'UTF-16';
+      outFile.open('r');
+      content = outFile.read().replace(/^\uFEFF/, '').replace(/^\s+|\s+$/g, '');
+      outFile.close();
+      outFile.remove();
+    } catch (e) { }
   }
   return content;
 }
@@ -196,20 +204,28 @@ function copyToClipboard(textStr) {
       var sh = new File(Folder.temp + '/ai2psd_clip.sh');
       sh.open('w');
       sh.writeln('#!/bin/bash');
-      sh.writeln('printf %s "' + textStr.replace(/"/g, '\\"') + '" | pbcopy');
+      sh.writeln('printf %s "' + textStr.replace(/"/g, '\"') + '" | pbcopy');
       sh.close();
       sh.execute();
       $.sleep(150);
       if (sh.exists) sh.remove();
     } else {
+      var txtFile = new File(Folder.temp + '/ai2psd_clip.txt');
+      txtFile.encoding = 'UTF-8';
+      txtFile.open('w');
+      txtFile.write(textStr);
+      txtFile.close();
+
       var bat = new File(Folder.temp + '/ai2psd_clip.bat');
       bat.open('w');
       bat.writeln('@echo off');
-      bat.writeln('echo | set /p="' + textStr.replace(/"/g, '""') + '" | clip');
+      bat.writeln('chcp 65001 >nul');
+      bat.writeln('clip < "' + txtFile.fsName + '"');
       bat.close();
       bat.execute();
       $.sleep(150);
       if (bat.exists) bat.remove();
+      if (txtFile.exists) txtFile.remove();
       keepIllustratorFocused();
     }
   } catch (e) { }
@@ -341,8 +357,8 @@ function showUpdateDialog(newVer, notes) {
  * পিসির ইউনিক হার্ডওয়্যার আইডি (HWID) বের করা
  */
 function getMachineHWID(savedData) {
-  if (savedData && savedData.hwid && savedData.hwid.length >= 5) {
-    return savedData.hwid;
+  if (savedData && savedData.hwid && savedData.hwid.length >= 10 && savedData.hwid.indexOf('-') !== -1) {
+    if (savedData.hwid.length === 36) return savedData.hwid;
   }
 
   var isMac = /mac/i.test($.os);
@@ -353,10 +369,10 @@ function getMachineHWID(savedData) {
     var shFile = new File(Folder.temp + '/ai2psd_pro_hwid.sh');
     shFile.open('w');
     shFile.writeln('#!/bin/bash');
-    shFile.writeln('ioreg -rd1 -c IOPlatformExpertDevice | awk \'/IOPlatformUUID/ { split($0, line, "\\""); printf("%s", line[4]); }\' > "' + outFile.fsName + '"');
+    shFile.writeln("ioreg -rd1 -c IOPlatformExpertDevice | awk '/IOPlatformUUID/ { split($0, line, \"\\\"\"); printf(\"%s\", line[4]); }' > \"" + outFile.fsName + "\"");
     shFile.close();
     shFile.execute();
-    for (var m = 0; m < 15; m++) {
+    for (var m = 0; m < 25; m++) {
       $.sleep(80);
       if (outFile.exists && outFile.length > 0) break;
     }
@@ -371,30 +387,39 @@ function getMachineHWID(savedData) {
     vbsFile.writeln('  uuid = objItem.UUID');
     vbsFile.writeln('Next');
     vbsFile.writeln('Set fso = CreateObject("Scripting.FileSystemObject")');
-    vbsFile.writeln('Set f = fso.CreateTextFile("' + outFile.fsName + '", True)');
+    vbsFile.writeln('Set f = fso.CreateTextFile("' + outFile.fsName.replace(/\\/g, '\\\\') + '", True)');
     vbsFile.writeln('f.Write uuid');
     vbsFile.writeln('f.Close');
     vbsFile.close();
 
-    vbsFile.execute();
+    var batFile = new File(Folder.temp + '/ai2psd_pro_hwid.bat');
+    batFile.open('w');
+    batFile.writeln('@echo off');
+    batFile.writeln('cscript //nologo "' + vbsFile.fsName + '" >nul 2>&1');
+    batFile.close();
+    batFile.execute();
 
-    for (var i = 0; i < 20; i++) {
+    for (var i = 0; i < 35; i++) {
       $.sleep(80);
       if (outFile.exists && outFile.length > 0) break;
     }
+    if (batFile.exists) batFile.remove();
     if (vbsFile.exists) vbsFile.remove();
     keepIllustratorFocused();
   }
 
   var hwid = '';
   if (outFile.exists) {
-    outFile.open('r');
-    hwid = outFile.read().replace(/^\uFEFF/, '').replace(/^\s+|\s+$/g, '');
-    outFile.close();
-    outFile.remove();
+    try {
+      outFile.open('r');
+      hwid = outFile.read().replace(/^\uFEFF/, '').replace(/^\s+|\s+$/g, '');
+      outFile.close();
+      outFile.remove();
+    } catch (e) { }
   }
 
   if (!hwid || hwid.length < 5) {
+    if (savedData && savedData.hwid) return savedData.hwid;
     var comp = $.getenv('COMPUTERNAME') || $.getenv('HOSTNAME') || 'PC';
     var usr = $.getenv('USERNAME') || $.getenv('USER') || 'USER';
     hwid = comp + '-' + usr;
@@ -459,25 +484,50 @@ function setFileProtection(fileObj, lock) {
 
 function readLicenseData() {
   var f = new File(LICENSE_CFG.licFile);
-  if (!f.exists) return null;
-  try {
-    f.encoding = 'UTF-8';
-    f.open('r');
-    var hexStr = f.read().replace(/^\s+|\s+$/g, '');
-    f.close();
-    var jsonStr = decodePayload(hexStr);
-    var obj = new Function('return (' + jsonStr + ')')();
-    if (!obj || !obj.key || !obj.lastCheck || !obj.hwid || !obj.sig) return null;
+  var oldLic = new File(Folder.myDocuments + '/Adobe Scripts/Ai2Psd_Pro_lic.json');
+  var olderLic = new File(Folder.myDocuments + '/Adobe Scripts/Ai2Psd_pro.json');
 
-    var expectedSig = computeLicenseSig(obj.key, obj.lastCheck, obj.hwid);
-    if (obj.sig !== expectedSig) {
-      removeLicenseData();
-      return null;
-    }
-    return obj;
-  } catch (e) {
-    return null;
+  if (f.exists) {
+    try {
+      f.encoding = 'UTF-8';
+      f.open('r');
+      var hexStr = f.read().replace(/^\s+|\s+$/g, '');
+      f.close();
+      var jsonStr = decodePayload(hexStr);
+      var obj = new Function('return (' + jsonStr + ')')();
+      if (obj && obj.key && obj.lastCheck && obj.sig) {
+        var expectedSig = computeLicenseSig(obj.key, obj.lastCheck, obj.hwid || '');
+        if (obj.sig === expectedSig) {
+          return obj;
+        }
+      }
+    } catch (e) { }
   }
+
+  // Auto-migration from plaintext JSON licenses
+  var cand = oldLic.exists ? oldLic : (olderLic.exists ? olderLic : null);
+  if (cand && cand.exists) {
+    try {
+      cand.encoding = 'UTF-8';
+      cand.open('r');
+      var content = cand.read().replace(/^\s+|\s+$/g, '');
+      cand.close();
+      var oldObj = new Function('return (' + content + ')')();
+      if (oldObj && oldObj.key) {
+        var currentHwid = getMachineHWID(null);
+        var now = new Date().getTime();
+        saveLicenseData(oldObj.key, oldObj.lastCheck || now, currentHwid);
+        return {
+          key: oldObj.key,
+          lastCheck: (oldObj.lastCheck || now).toString(),
+          hwid: currentHwid,
+          sig: computeLicenseSig(oldObj.key, (oldObj.lastCheck || now).toString(), currentHwid)
+        };
+      }
+    } catch (e) { }
+  }
+
+  return null;
 }
 
 function saveLicenseData(key, timestamp, hwid) {
@@ -638,11 +688,12 @@ function showRegistrationDialog() {
 /**
  * প্রফেশনাল অ্যাক্টিভেশন ডায়ালগ
  */
-function showActivationDialog(statusMsg, isError) {
+function showActivationDialog(statusMsg, isError, hwid) {
   keepIllustratorFocused();
   var isMac = /mac/i.test($.os);
   var isDarkUI = app.preferences.getRealPreference('uiBrightness') <= 0.5;
   var actionResult = null;
+  var currentHwid = hwid || getMachineHWID(null);
 
   var dlg = new Window('dialog', 'Ai2Psd_Pro — Pro License Activation');
   dlg.orientation = 'column';
@@ -670,7 +721,7 @@ function showActivationDialog(statusMsg, isError) {
   var appTitle = titleCol.add('statictext', undefined, 'Ai2Psd_Pro');
   appTitle.graphics.font = ScriptUI.newFont(appTitle.graphics.font.name, 'BOLD', 16);
 
-  var appSub = titleCol.add('statictext', undefined, 'PRO VECTOR-TO-PSD ENGINE');
+  var appSub = titleCol.add('statictext', undefined, 'PRO HARDWARE-BOUND ENGINE');
   appSub.graphics.font = ScriptUI.newFont(appSub.graphics.font.name, 'REGULAR', 8.5);
   appSub.graphics.foregroundColor = appSub.graphics.newPen(appSub.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.65, 0.78] : [0.40, 0.45, 0.52], 1);
 
@@ -679,35 +730,60 @@ function showActivationDialog(statusMsg, isError) {
   supBtn.graphics.font = ScriptUI.newFont(supBtn.graphics.font.name, 'REGULAR', 9);
   supBtn.onClick = function () { openURL(LICENSE_CFG.repoUrl); };
 
-  var cardPnl = dlg.add('panel', undefined, 'Pro License Activation');
+  var cardPnl = dlg.add('panel', undefined, 'Workstation License Binding');
   cardPnl.orientation = 'column';
   cardPnl.alignChildren = ['fill', 'top'];
-  cardPnl.margins = [14, 18, 14, 14];
+  cardPnl.margins = [14, 16, 14, 14];
   cardPnl.spacing = 10;
 
-  var msgTxt = cardPnl.add('statictext', undefined, statusMsg || 'Enter your Pro License Key to unlock Ai2Psd_Pro, or click "Get License" below to register this workstation.', { multiline: true });
-  msgTxt.preferredSize.width = 315;
+  var msgTxt = cardPnl.add('statictext', undefined, statusMsg || 'License is bound directly to your PC Hardware ID. Enter your Pro License Key below to unlock:', { multiline: true });
+  msgTxt.preferredSize.width = 330;
   if (isError) {
     msgTxt.graphics.foregroundColor = msgTxt.graphics.newPen(msgTxt.graphics.PenType.SOLID_COLOR, isDarkUI ? [1.0, 0.45, 0.45] : [0.80, 0.12, 0.12], 1);
   }
 
+  // PC ID Display Row
+  var hwidGrp = cardPnl.add('group');
+  hwidGrp.orientation = 'column';
+  hwidGrp.alignChildren = ['fill', 'top'];
+  hwidGrp.spacing = 4;
+
+  var hwidLbl = hwidGrp.add('statictext', undefined, 'YOUR PC HARDWARE ID (DEVICE BOUND):');
+  hwidLbl.graphics.font = ScriptUI.newFont(hwidLbl.graphics.font.name, 'BOLD', 9);
+
+  var hwidRow = hwidGrp.add('group');
+  hwidRow.orientation = 'row';
+  hwidRow.alignChildren = ['fill', 'center'];
+  hwidRow.spacing = 6;
+
+  var hwidBox = hwidRow.add('edittext', undefined, currentHwid, { readonly: true });
+  hwidBox.preferredSize = [250, 26];
+
+  var copyIdBtn = hwidRow.add('button', undefined, 'Copy ID');
+  copyIdBtn.preferredSize = [70, 26];
+  copyIdBtn.onClick = function() {
+    copyToClipboard(currentHwid);
+    alert('PC Hardware ID copied to clipboard!\n\n' + currentHwid, 'Ai2Psd_Pro');
+  };
+
+  // License Key Row
   var inputBoxGrp = cardPnl.add('group');
   inputBoxGrp.orientation = 'column';
   inputBoxGrp.alignChildren = ['fill', 'top'];
   inputBoxGrp.spacing = 4;
 
-  var keyLbl = inputBoxGrp.add('statictext', undefined, 'PRO LICENSE KEY');
+  var keyLbl = inputBoxGrp.add('statictext', undefined, 'PRO LICENSE KEY:');
   keyLbl.graphics.font = ScriptUI.newFont(keyLbl.graphics.font.name, 'BOLD', 9);
 
   var keyInp = inputBoxGrp.add('edittext', undefined, '');
-  keyInp.preferredSize = [315, 28];
+  keyInp.preferredSize = [330, 28];
   keyInp.active = true;
 
   var infoRow = cardPnl.add('group');
   infoRow.orientation = 'row';
   infoRow.alignChildren = ['fill', 'center'];
 
-  var shieldTxt = infoRow.add('statictext', undefined, '\u25CF Hardware-Bound Pro License  |  Offline Supported');
+  var shieldTxt = infoRow.add('statictext', undefined, '\u25CF Bound to this PC ID only  |  No personal name required');
   shieldTxt.graphics.font = ScriptUI.newFont(shieldTxt.graphics.font.name, 'ITALIC', 9.5);
   shieldTxt.graphics.foregroundColor = shieldTxt.graphics.newPen(shieldTxt.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.60, 0.68] : [0.45, 0.48, 0.54], 1);
 
@@ -716,18 +792,15 @@ function showActivationDialog(statusMsg, isError) {
   btnGrp.alignChildren = ['fill', 'center'];
   btnGrp.spacing = 8;
 
-  var cancelBtn, getLicBtn, actBtn;
+  var cancelBtn, actBtn;
   if (isMac) {
     cancelBtn = btnGrp.add('button', undefined, 'Exit', { name: 'cancel' });
-    getLicBtn = btnGrp.add('button', undefined, 'Get License');
-    actBtn = btnGrp.add('button', undefined, 'Activate', { name: 'ok' });
+    actBtn = btnGrp.add('button', undefined, 'Activate License', { name: 'ok' });
   } else {
-    actBtn = btnGrp.add('button', undefined, 'Activate', { name: 'ok' });
-    getLicBtn = btnGrp.add('button', undefined, 'Get License');
+    actBtn = btnGrp.add('button', undefined, 'Activate License', { name: 'ok' });
     cancelBtn = btnGrp.add('button', undefined, 'Exit', { name: 'cancel' });
   }
   actBtn.preferredSize.height = 28;
-  getLicBtn.preferredSize.height = 28;
   cancelBtn.preferredSize.height = 28;
 
   var footGrp = dlg.add('group');
@@ -739,30 +812,21 @@ function showActivationDialog(statusMsg, isError) {
   brandTag.graphics.font = ScriptUI.newFont(brandTag.graphics.font.name, 'BOLD', 9.5);
   setupActionLink(brandTag, function () { openURL(LICENSE_CFG.profileUrl); }, true);
 
-  var getLicLink = footGrp.add('statictext', undefined, 'Get License Key \u2726');
+  var getLicLink = footGrp.add('statictext', undefined, 'Copy PC ID for Key \u2726');
   getLicLink.justify = 'right';
   getLicLink.graphics.font = ScriptUI.newFont(getLicLink.graphics.font.name, 'BOLD', 9.5);
-
-  function triggerGetLicense() {
-    dlg.close();
-    var userName = showRegistrationDialog();
-    if (userName) {
-      actionResult = { mode: 'register', value: userName };
-    } else {
-      actionResult = { mode: 'reopen' };
-    }
-  }
-
-  setupActionLink(getLicLink, triggerGetLicense, false);
-  getLicBtn.onClick = triggerGetLicense;
+  setupActionLink(getLicLink, function() {
+    copyToClipboard(currentHwid);
+    alert('PC ID copied to clipboard! Send this ID to get your key:\n\n' + currentHwid, 'Ai2Psd_Pro');
+  }, false);
 
   actBtn.onClick = function () {
     var val = keyInp.text.replace(/^\s+|\s+$/g, '');
     if (!val) {
-      alert('Please enter your Pro License Key or click "Get License".', 'Ai2Psd_Pro');
+      alert('Please enter your Pro License Key.', 'Ai2Psd_Pro');
       return;
     }
-    actBtn.text = 'Verifying...';
+    actBtn.text = 'Verifying PC ID...';
     actBtn.enabled = false;
     dlg.update();
     actionResult = { mode: 'activate', value: val };
@@ -809,13 +873,27 @@ function verifyLicense() {
   var checkIntervalMs = LICENSE_CFG.checkIntervalDays * 24 * 60 * 60 * 1000;
   var graceMs = LICENSE_CFG.offlineGraceDays * 24 * 60 * 60 * 1000;
 
-  var currentHwid = getMachineHWID(null);
+  var currentHwid = getMachineHWID(saved);
 
   if (saved && saved.key && saved.lastCheck) {
-    if (saved.hwid !== currentHwid) {
-      removeLicenseData();
-      var reactivated = handleActivationFlow('Workstation mismatch detected. Please activate on this PC:', true, currentHwid, now);
-      return { valid: reactivated, mode: 'online' };
+    if (saved.hwid && saved.hwid !== currentHwid) {
+      var verifySaved = callLicenseServer('action=verify&key=' + encodeURIComponent(saved.key) + '&hwid=' + encodeURIComponent(saved.hwid));
+      if (verifySaved.status === 'valid') {
+        saveLicenseData(saved.key, now, saved.hwid);
+        return { valid: true, mode: 'online' };
+      }
+      var verifyCurrent = callLicenseServer('action=verify&key=' + encodeURIComponent(saved.key) + '&hwid=' + encodeURIComponent(currentHwid));
+      if (verifyCurrent.status === 'valid') {
+        saveLicenseData(saved.key, now, currentHwid);
+        return { valid: true, mode: 'online' };
+      }
+
+      if (verifySaved.status === 'error' || verifyCurrent.status === 'error') {
+        removeLicenseData();
+        var reactivated = handleActivationFlow('Workstation mismatch detected. Please activate on this PC:', true, currentHwid, now);
+        return { valid: reactivated, mode: 'online' };
+      }
+      return { valid: true, mode: 'offline' };
     }
 
     var lastTime = parseFloat(saved.lastCheck);
@@ -850,40 +928,35 @@ function handleActivationFlow(initialMsg, isError, hwid, now) {
   var errState = isError;
 
   while (true) {
-    var action = showActivationDialog(msg, errState);
+    var action = showActivationDialog(msg, errState, hwid);
     if (!action) return false;
 
-    if (action.mode === 'reopen') continue;
-
-    if (action.mode === 'register') {
-      var regRes = callLicenseServer('action=register&name=' + encodeURIComponent(action.value) + '&hwid=' + encodeURIComponent(hwid));
-      if (regRes.status === 'valid' && regRes.key) {
-        saveLicenseData(regRes.key, now, hwid);
-        keepIllustratorFocused();
-        alert(regRes.message || ('Pro License Activated!\nYour Key: ' + regRes.key), 'Ai2Psd_Pro');
-        keepIllustratorFocused();
-        return true;
-      } else {
-        msg = regRes.message || 'Registration failed. Check your internet connection.';
-        errState = true;
-      }
-    } else if (action.mode === 'activate') {
+    if (action.mode === 'activate') {
       var verRes = callLicenseServer('action=verify&key=' + encodeURIComponent(action.value) + '&hwid=' + encodeURIComponent(hwid));
       if (verRes.status === 'valid') {
         saveLicenseData(action.value, now, hwid);
         keepIllustratorFocused();
-        alert(verRes.message || 'Ai2Psd_Pro has been activated successfully!', 'Ai2Psd_Pro');
+        alert(verRes.message || 'Ai2Psd_Pro activated successfully on this PC ID!', 'Ai2Psd_Pro');
         keepIllustratorFocused();
         return true;
       } else {
         if (verRes.status === 'error') removeLicenseData();
-        msg = verRes.message || 'Invalid Pro License Key or No Internet.';
+        msg = verRes.message || 'Invalid Pro License Key for this PC ID, or no internet.';
         errState = true;
       }
     }
   }
 }
+
 // ==========================================
+
+function exitIsolationMode() {
+  try {
+    while (app.documents.length && app.activeDocument.hasIsolatedArtwork) {
+      app.executeMenuCommand('exitIsolate');
+    }
+  } catch (e) { }
+}
 
 function main() {
   var licCheck = verifyLicense();
@@ -1066,6 +1139,24 @@ function main() {
   rangeInp.characters = 12;
   rangeInp.helpTip = '"1, 3-5" -> 1, 3, 4, 5';
 
+  // DESTINATION PANEL
+  var destPnl = win.add('panel', undefined, 'Save PSD Destination');
+  destPnl.alignChildren = 'left';
+  destPnl.margins = CFG.mgns;
+
+  var destGrp = destPnl.add('group');
+  destGrp.orientation = 'row';
+  destGrp.alignChildren = ['left', 'center'];
+  destGrp.spacing = 14;
+
+  var destDeskRb = destGrp.add('radiobutton', undefined, 'Desktop (Instant Access)');
+  destDeskRb.value = true;
+  var destDocRb = destGrp.add('radiobutton', undefined, 'Original .ai Folder');
+  destDocRb.enabled = hasOpenDoc() && (function(){ try { return doc && doc.path && doc.path.toString().length > 0; } catch(e){ return false; } })();
+
+  var openFolCb = destPnl.add('checkbox', undefined, 'Open & highlight PSD in Explorer when finished');
+  openFolCb.value = true;
+
   // TWO COLUMN LAYOUT
   var row = win.add('group');
   row.alignChildren = ['fill', 'fill'];
@@ -1227,7 +1318,6 @@ function main() {
 
     var docs = [];
     var currDoc;
-    var isSuccess = false;
 
     if (folRb.value) {
       docs = [].concat(srcFiles);
@@ -1246,12 +1336,18 @@ function main() {
       return;
     }
 
+    var saveToDesktop = destDeskRb.value;
+    var autoOpenExplorer = openFolCb.value;
+
     ok.enabled = false;
     progLbl.text = 'Doc: 1' + LANG.of + docs.length;
     addCompShapeAction(CFG.actSet, CFG.actName, CFG.actPath);
 
     var origInteraction = app.userInteractionLevel;
     app.userInteractionLevel = UserInteractionLevel.DONTDISPLAYALERTS;
+
+    var exportedItems = [];
+    var lastError = '';
 
     try {
       for (var i = 0, len = docs.length; i < len; i++) {
@@ -1267,20 +1363,30 @@ function main() {
         }
         currDoc = app.activeDocument;
 
+        exitIsolationMode();
+
         try {
           process(currDoc, win, progBar, pctLbl, CFG, isExpandComp.value);
         } catch (err) { }
 
         currDoc.activate();
+        exitIsolationMode();
 
         var psdOpts = setExportOptions(currDoc);
-        isSuccess = exportAsPsd(currDoc, psdOpts);
+        var res = exportAsPsd(currDoc, psdOpts, saveToDesktop);
+        if (res && res.success) {
+          exportedItems.push(res);
+        } else {
+          lastError = (res && res.error) ? res.error : 'Unknown export error';
+        }
 
         if (folRb.value) {
           app.activeDocument.close(SaveOptions.DONOTSAVECHANGES);
         }
       }
-    } catch (err) { }
+    } catch (err) {
+      lastError = err.message;
+    }
 
     app.userInteractionLevel = origInteraction;
 
@@ -1288,7 +1394,19 @@ function main() {
       app.unloadAction(CFG.actSet, '');
     } catch (err) { }
 
-    if (isSuccess) alert(LANG.done, 'Ai2Psd_Pro');
+    if (exportedItems.length > 0) {
+      var firstRes = exportedItems[0];
+      var targetFol = firstRes.folder;
+      var folPathStr = (targetFol && targetFol.fsName) ? targetFol.fsName : (Folder.desktop.fsName || 'Desktop');
+      
+      if (autoOpenExplorer && firstRes.file) {
+        revealInExplorer(firstRes.file);
+      }
+
+      alert('PSD Export Completed Successfully!\n\nSaved File: ' + (firstRes.file ? firstRes.file.name : 'PSD') + '\nSaved Location:\n' + folPathStr, 'Ai2Psd_Pro');
+    } else {
+      alert('PSD Export Failed: ' + (lastError || 'Could not export file.') + '\nPlease ensure the document has visible vector artwork and try again.', 'Ai2Psd_Pro Error');
+    }
     win.close();
   }
 
@@ -1306,10 +1424,12 @@ function main() {
     data.multi = isSaveAbs.value;
     data.abs = allAbRb.value ? 0 : (actAbRb.value ? 1 : 2);
     data.range = rangeInp.text;
-    data.res = ppiList.selection.index;
+    data.res = ppiList.selection ? ppiList.selection.index : 0;
     data.ppi = ppiInp.text;
     data.color = origColRb.value ? 0 : (rgbRb.value ? 1 : 2);
     data.expand = isExpandComp.value;
+    data.dest = destDeskRb.value ? 0 : 1;
+    data.open_fol = openFolCb.value;
 
     f.write(stringify(data));
     f.close();
@@ -1340,12 +1460,20 @@ function main() {
           else if (data.abs == 1) actAbRb.notify('onClick');
           else rangeAbRb.notify('onClick');
           rangeInp.text = data.range || '1,2';
-          ppiList.selection = parseInt(data.res) || 0;
+          if (ppiList.items.length) {
+            var sIdx = parseInt(data.res) || 0;
+            if (sIdx >= 0 && sIdx < ppiList.items.length) ppiList.selection = sIdx;
+          }
           ppiInp.text = data.ppi || '96';
           if (data.color == 0) origColRb.value = true;
           else if (data.color == 1) rgbRb.value = true;
           else cmykRb.value = true;
           if (data.expand !== undefined) isExpandComp.value = String(data.expand) === 'true';
+          if (data.dest !== undefined && destDocRb.enabled) {
+            if (parseInt(data.dest) === 1) destDocRb.value = true;
+            else destDeskRb.value = true;
+          }
+          if (data.open_fol !== undefined) openFolCb.value = String(data.open_fol) === 'true';
         }
       } catch (err) { }
     }
@@ -1371,7 +1499,6 @@ function main() {
 
   function setExportOptions(doc) {
     var ppi = getPPI(ppiList.selection.text, ppiInp.text);
-    var range = actAbRb.enabled && actAbRb.value ? actAbIdx + 1 : '';
 
     var opts = new ExportOptionsPhotoshop();
     opts.antiAliasing = CFG.aa;
@@ -1379,29 +1506,36 @@ function main() {
     opts.embedICCProfile = CFG.embedIcc;
     opts.maximumEditability = true;
     opts.resolution = ppi;
-    opts.saveMultipleArtboards = isSaveAbs.value;
     opts.warnings = false;
     opts.writeLayers = true;
 
-    var imgCol;
-    if (origColRb.value) {
-      imgCol = /rgb/i.test(doc.documentColorSpace) ? ImageColorSpace.RGB : ImageColorSpace.CMYK;
-    } else if (rgbRb.value) {
-      app.executeMenuCommand('doc-color-rgb');
+    var imgCol = /rgb/i.test(doc.documentColorSpace) ? ImageColorSpace.RGB : ImageColorSpace.CMYK;
+    if (rgbRb.value) {
+      try { app.executeMenuCommand('doc-color-rgb'); } catch (e) { }
       imgCol = ImageColorSpace.RGB;
-    } else {
-      app.executeMenuCommand('doc-color-cmyk');
+    } else if (cmykRb.value) {
+      try { app.executeMenuCommand('doc-color-cmyk'); } catch (e) { }
       imgCol = ImageColorSpace.CMYK;
     }
-
     opts.imageColorSpace = imgCol;
 
-    if (rangeAbRb.value) {
-      range = parseAndFilterIndexes(rangeInp.text, doc.artboards.length);
-      for (var i = 0; i < range.length; i++) {
-        range[i] = (range[i] < 9 ? '0' : '') + (range[i] + 1).toString();
+    var hasMulti = doc.artboards && doc.artboards.length > 1;
+    var range = '';
+    if (isSaveAbs.value && hasMulti) {
+      opts.saveMultipleArtboards = true;
+      if (actAbRb.value) {
+        var currentAbIdx = doc.artboards.getActiveArtboardIndex();
+        range = (currentAbIdx + 1).toString();
+      } else if (rangeAbRb.value) {
+        var parsedRange = parseAndFilterIndexes(rangeInp.text, doc.artboards.length);
+        for (var i = 0; i < parsedRange.length; i++) {
+          parsedRange[i] = (parsedRange[i] + 1).toString();
+        }
+        range = parsedRange.join(', ');
       }
-      range = '' + range.join();
+    } else {
+      opts.saveMultipleArtboards = false;
+      range = '';
     }
 
     opts.artboardRange = range;
@@ -1479,7 +1613,7 @@ function addCompShapeAction(set, name, path) {
     '/value 0',
     '}',
     '}',
-    '}'].join('');
+    '}'].join('\n');
 
   try { app.unloadAction(set, ''); } catch (err) { }
   createAction(str, set, path);
@@ -1564,7 +1698,11 @@ function hasLiveEffect(item) {
     if (item.visibleBounds && item.geometricBounds) {
       var vb = item.visibleBounds;
       var gb = item.geometricBounds;
-      var tol = 0.5;
+      var strokeWidth = 0;
+      try {
+        if (item.stroked && item.strokeWidth) strokeWidth = item.strokeWidth;
+      } catch (e) { }
+      var tol = (strokeWidth / 2) + 0.8;
       if (Math.abs(vb[0] - gb[0]) > tol ||
         Math.abs(vb[1] - gb[1]) > tol ||
         Math.abs(vb[2] - gb[2]) > tol ||
@@ -1621,8 +1759,8 @@ function limitGroupDepth(layers, depth) {
   depth = (isNaN(parseInt(depth)) ? 4 : parseInt(depth)) + 1;
   for (var i = 0; i < layers.length; i++) {
     groupNormalize(layers[i].groupItems, depth);
-    if (layers[i].layers.length) {
-      limitGroupDepth(layers[i], depth);
+    if (layers[i].layers && layers[i].layers.length) {
+      limitGroupDepth(layers[i].layers, depth);
     }
   }
 }
@@ -1652,7 +1790,7 @@ function groupNormalize(groups, max, counter, dest) {
 }
 
 function ungroupAll(obj) {
-  if (hasLiveEffect(obj)) return;
+  if (hasLiveEffect(obj) || obj.clipped) return;
   var childs = getGroupChilds(obj);
   if (!childs.length) {
     try { obj.remove(); } catch (e) { }
@@ -1662,14 +1800,13 @@ function ungroupAll(obj) {
   for (var i = 0, len = childs.length; i < len; i++) {
     var item = childs[i];
     try {
-      if (!obj.clipped && isType(item.parent, 'layer')) {
-        item.move(obj, ElementPlacement.PLACEBEFORE);
-      }
-      if (isType(item, 'group|layer')) {
+      if (isType(item, 'group') && !item.clipped && !hasLiveEffect(item)) {
         ungroupAll(item);
       }
+      item.move(obj, ElementPlacement.PLACEBEFORE);
     } catch (err) { }
   }
+  try { if (!obj.pageItems.length) obj.remove(); } catch (e) { }
 }
 
 function getGroupChilds(obj) {
@@ -1781,10 +1918,14 @@ function convertItemFast(item, actName, actSet, expandToSolid) {
       if (isType(item, 'group')) {
         if (!isEmpty(props.name)) item.name = props.name;
       } else {
-        var safeGrp = item.layer.groupItems.add();
-        safeGrp.move(item, ElementPlacement.PLACEBEFORE);
-        item.move(safeGrp, ElementPlacement.PLACEATEND);
-        if (!isEmpty(props.name)) safeGrp.name = props.name;
+        if (isType(item.parent, 'layer')) {
+          var safeGrp = item.parent.groupItems.add();
+          safeGrp.move(item, ElementPlacement.PLACEBEFORE);
+          item.move(safeGrp, ElementPlacement.PLACEATEND);
+          if (!isEmpty(props.name)) safeGrp.name = props.name;
+        } else {
+          if (!isEmpty(props.name)) item.name = props.name;
+        }
       }
     }
   } catch (err) { }
@@ -1918,37 +2059,129 @@ function getUnique(arr) {
   return unique;
 }
 
-function exportAsPsd(doc, opts) {
-  var fol = (doc.path == '' || doc.path.toString().length < 1) ? Folder.desktop : doc.path;
+function exportAsPsd(doc, opts, saveToDesktop) {
+  var fol;
+  if (saveToDesktop) {
+    fol = Folder.desktop;
+  } else {
+    try {
+      fol = doc.path;
+    } catch (e) {
+      fol = Folder.desktop;
+    }
+    if (!fol || fol.toString().length < 1) {
+      fol = Folder.desktop;
+    }
+  }
+
+  var baseName = 'Untitled';
   try {
-    var name = doc.name.replace(/\.[^\.]+$/, '') + '.psd';
-    var f = new File(decodeURI(fol) + '/' + name);
-    doc.exportFile(f, ExportType.PHOTOSHOP, opts);
-    return true;
-  } catch (err) {
-    return false;
+    baseName = doc.name.replace(/\.[^\.]+$/, '');
+  } catch (e) { }
+  if (!baseName || baseName.length === 0) baseName = 'Untitled';
+
+  var targetFile;
+  if (opts.saveMultipleArtboards) {
+    targetFile = new File(decodeURI(fol) + '/' + baseName);
+  } else {
+    targetFile = new File(decodeURI(fol) + '/' + baseName + '.psd');
+  }
+
+  if (opts.writeLayers) {
+    try {
+      if (/rgb/i.test(doc.documentColorSpace)) {
+        opts.imageColorSpace = ImageColorSpace.RGB;
+      } else if (/cmyk/i.test(doc.documentColorSpace)) {
+        opts.imageColorSpace = ImageColorSpace.CMYK;
+      }
+    } catch (csErr) { }
+  }
+
+  // Attempt 1: Full layered export
+  try {
+    doc.exportFile(targetFile, ExportType.PHOTOSHOP, opts);
+    var savedFile = opts.saveMultipleArtboards ? new File(decodeURI(fol) + '/' + baseName + '_Artboard 1.psd') : targetFile;
+    if (!savedFile.exists) savedFile = targetFile;
+    return { success: true, file: savedFile, folder: fol };
+  } catch (err1) {
+    // Attempt 2: Try with maximumEditability = false (preserves layers)
+    try {
+      opts.maximumEditability = false;
+      doc.exportFile(targetFile, ExportType.PHOTOSHOP, opts);
+      var savedFile2 = opts.saveMultipleArtboards ? new File(decodeURI(fol) + '/' + baseName + '_Artboard 1.psd') : targetFile;
+      if (!savedFile2.exists) savedFile2 = targetFile;
+      return { success: true, file: savedFile2, folder: fol };
+    } catch (err2) { }
+
+    // Attempt 3: If multi-artboard failed, export single file
+    try {
+      if (opts.saveMultipleArtboards) {
+        opts.saveMultipleArtboards = false;
+        opts.artboardRange = '';
+        var singleFile = new File(decodeURI(fol) + '/' + baseName + '.psd');
+        doc.exportFile(singleFile, ExportType.PHOTOSHOP, opts);
+        return { success: true, file: singleFile, folder: fol };
+      }
+    } catch (err3) { }
+
+    // Attempt 4: Fallback to Desktop
+    try {
+      var deskFile = new File(Folder.desktop + '/' + baseName + '.psd');
+      opts.saveMultipleArtboards = false;
+      opts.artboardRange = '';
+      opts.maximumEditability = false;
+      doc.exportFile(deskFile, ExportType.PHOTOSHOP, opts);
+      return { success: true, file: deskFile, folder: Folder.desktop };
+    } catch (err4) { }
+
+    return { success: false, error: err1.message };
   }
 }
 
 function openURL(url) {
-  var html = new File(Folder.temp.absoluteURI + '/aisLink.html');
-  html.open('w');
-  var htmlBody = '<html><head><META HTTP-EQUIV=Refresh CONTENT="0; URL=' + url + '"></head><body> <p></body></html>';
-  html.write(htmlBody);
-  html.close();
-  html.execute();
+  var isMac = /mac/i.test($.os);
+  try {
+    if (isMac) {
+      var sh = new File(Folder.temp + '/ai2psd_open.sh');
+      sh.open('w');
+      sh.writeln('#!/bin/bash');
+      sh.writeln('open "' + url + '"');
+      sh.close();
+      sh.execute();
+      $.sleep(100);
+      if (sh.exists) sh.remove();
+    } else {
+      var bat = new File(Folder.temp + '/ai2psd_open.bat');
+      bat.open('w');
+      bat.writeln('@echo off');
+      bat.writeln('start "" "' + url + '"');
+      bat.close();
+      bat.execute();
+      $.sleep(100);
+      if (bat.exists) bat.remove();
+    }
+  } catch (e) { }
 }
 
 function stringify(obj) {
+  if (obj === null || obj === undefined) return 'null';
   var json = [];
   for (var key in obj) {
     if (obj.hasOwnProperty(key)) {
-      var value = obj[key].toString()
-        .replace(/\t/g, "\\t")
-        .replace(/\r/g, "\\r")
-        .replace(/\n/g, "\\n")
-        .replace(/"/g, '\\"');
-      json.push('"' + key + '":"' + value + '"');
+      var val = obj[key];
+      if (val === null || val === undefined) {
+        json.push('"' + key + '":null');
+      } else if (typeof val === 'number' || typeof val === 'boolean') {
+        json.push('"' + key + '":' + val);
+      } else {
+        var strVal = val.toString()
+          .replace(/\\/g, "\\\\")
+          .replace(/\t/g, "\\t")
+          .replace(/\r/g, "\\r")
+          .replace(/\n/g, "\\n")
+          .replace(/"/g, '\\"');
+        json.push('"' + key + '":"' + strVal + '"');
+      }
     }
   }
   return "{" + json.join(",") + "}";

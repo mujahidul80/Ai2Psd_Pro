@@ -14,8 +14,7 @@ powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [N
 
 if exist "%TEMP_PS%" (
     echo [*] Launching installer...
-    powershell -NoProfile -ExecutionPolicy RemoteSigned -File "%TEMP_PS%"
-    if exist "%TEMP_PS%" del /f /q "%TEMP_PS%" >nul 2>&1
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%TEMP_PS%"
 ) else (
     echo.
     echo [X] Error: Could not download installer. Please check your internet connection.

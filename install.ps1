@@ -30,7 +30,7 @@ if (-not $isAdmin) {
         
         if (Test-Path $tempScript) {
             Unblock-File -Path $tempScript -ErrorAction SilentlyContinue
-            Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy RemoteSigned -File `"$tempScript`""
+            Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempScript`"" -Wait
         } else {
             throw "Could not write temporary installer script."
         }
@@ -67,7 +67,17 @@ $searchRoots = @(
     (Join-Path ${env:SystemDrive} "Program Files\Adobe"),
     "C:\Program Files (x86)\Adobe",
     "D:\Program Files\Adobe"
-) | Select-Object -Unique
+)
+
+try {
+    $regApp = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Illustrator.exe" -ErrorAction SilentlyContinue
+    if ($regApp -and $regApp.Path -and (Test-Path $regApp.Path)) {
+        $searchRoots += (Split-Path $regApp.Path -Parent)
+        $searchRoots += $regApp.Path
+    }
+} catch {}
+
+$searchRoots = $searchRoots | Select-Object -Unique
 
 $installedScriptsFolders = @()
 
@@ -85,6 +95,21 @@ foreach ($root in $searchRoots) {
                     $installedScriptsFolders += [PSCustomObject]@{
                         VersionName = $ai.Name
                         ScriptsPath = $s.FullName
+                    }
+                }
+                if (-not $scriptsDirs) {
+                    $localeDirs = Get-ChildItem -Path $presetsDir -Directory -ErrorAction SilentlyContinue
+                    foreach ($loc in $localeDirs) {
+                        $newScripts = Join-Path $loc.FullName "Scripts"
+                        if (-not (Test-Path $newScripts)) {
+                            New-Item -ItemType Directory -Path $newScripts -Force -ErrorAction SilentlyContinue | Out-Null
+                        }
+                        if (Test-Path $newScripts) {
+                            $installedScriptsFolders += [PSCustomObject]@{
+                                VersionName = $ai.Name
+                                ScriptsPath = $newScripts
+                            }
+                        }
                     }
                 }
             }
