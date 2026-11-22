@@ -1,4 +1,4 @@
 {
-  "version": "5.5",
-  "notes": "Export only open/visible layers (preserve hidden layers untouched), dedicated ScriptUI export completion popup, and clean same-folder saving."
+  "version": "5.6",
+  "notes": "Export PSD using native Creold pipeline, clean native completion alert (no extra popup), and preserve hidden layers."
 }
