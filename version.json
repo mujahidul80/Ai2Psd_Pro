@@ -1,4 +1,4 @@
 {
-  "version": "5.4",
-  "notes": "Direct same-folder PSD export, automatic Explorer reveal, clean native UI, and isolation mode exit fix."
+  "version": "5.5",
+  "notes": "Export only open/visible layers (preserve hidden layers untouched), dedicated ScriptUI export completion popup, and clean same-folder saving."
 }

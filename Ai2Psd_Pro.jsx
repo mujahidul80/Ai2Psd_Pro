@@ -14,7 +14,7 @@ $.localize = true;
 // GOOGLE SCRIPT & GITHUB CONFIGURATION
 // ==========================================
 var LICENSE_CFG = {
-  currentVersion: '5.4',
+  currentVersion: '5.5',
   apiUrl: 'https://script.google.com/macros/s/AKfycby9-GyRG5SWyUvoUHuEhtX_DY0n8KjEH_M8TYMAF3eCYpRnED9mJXNyE5hrIZ-FwCQr/exec',
   versionUrl: 'https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/version.json',
   installCmd: 'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/install.ps1 | iex"',
@@ -951,38 +951,8 @@ function handleActivationFlow(initialMsg, isError, hwid, now) {
 // ==========================================
 
 function exitIsolationMode() {
-  try {
-    var isIso = false;
-    try {
-      var testL = app.activeDocument.layers.add();
-      testL.remove();
-    } catch (e) {
-      isIso = true;
-    }
-    if (isIso) {
-      try { app.executeMenuCommand('isolateModeExit'); } catch (e) { }
-      try { app.executeMenuCommand('exitIsolate'); } catch (e) { }
-      var isMac = /mac/i.test($.os);
-      if (isMac) {
-        try {
-          app.doScript('tell application "System Events" to key code 53', ScriptLanguage.APPLESCRIPT_LANGUAGE);
-        } catch (e) { }
-      } else {
-        var vbs = new File(Folder.temp + '/ai2psd_esc.vbs');
-        vbs.open('w');
-        vbs.writeln('Set ws = CreateObject("WScript.Shell")');
-        vbs.writeln('ws.AppActivate "Adobe Illustrator"');
-        vbs.writeln('WScript.Sleep 50');
-        vbs.writeln('ws.SendKeys "{ESC}"');
-        vbs.writeln('WScript.Sleep 50');
-        vbs.writeln('ws.SendKeys "{ESC}"');
-        vbs.close();
-        vbs.execute();
-        $.sleep(200);
-        if (vbs.exists) vbs.remove();
-      }
-    }
-  } catch (e) { }
+  try { app.executeMenuCommand('isolateModeExit'); } catch (e) { }
+  try { app.executeMenuCommand('exitIsolate'); } catch (e) { }
 }
 
 function main() {
@@ -1394,7 +1364,11 @@ function main() {
       lastError = err.message;
     }
 
-    app.userInteractionLevel = origInteraction;
+    win.close();
+
+    try {
+      app.userInteractionLevel = UserInteractionLevel.DISPLAYALERTS;
+    } catch (e) { }
 
     try {
       app.unloadAction(CFG.actSet, '');
@@ -1403,17 +1377,12 @@ function main() {
     if (exportedItems.length > 0) {
       var firstRes = exportedItems[0];
       var targetFol = firstRes.folder;
-      var folPathStr = (targetFol && targetFol.fsName) ? targetFol.fsName : (Folder.desktop.fsName || 'Desktop');
+      var folPathStr = (targetFol && targetFol.fsName) ? targetFol.fsName : (firstRes.file && firstRes.file.parent ? firstRes.file.parent.fsName : 'Folder');
       
-      if (firstRes.file && firstRes.file.exists) {
-        revealInExplorer(firstRes.file);
-      }
-
-      alert('PSD Export Completed Successfully!\n\nSaved File: ' + (firstRes.file ? firstRes.file.name : 'PSD') + '\nSaved Location:\n' + folPathStr, 'Ai2Psd_Pro');
+      showSuccessPopup(firstRes.file, folPathStr);
     } else {
-      alert('PSD Export Failed: ' + (lastError || 'Could not export file.') + '\nPlease ensure the document has visible vector artwork and try again.', 'Ai2Psd_Pro Error');
+      showErrorPopup(lastError || 'Could not export file.');
     }
-    win.close();
   }
 
   function saveSettings(prefs) {
@@ -1740,18 +1709,18 @@ function collectItemsFast(coll, results) {
 }
 
 function unlockAll(doc) {
-  unlockLayers(doc.layers);
-  try { app.executeMenuCommand('showAll'); } catch (e) { }
-  try { app.executeMenuCommand('unlockAll'); } catch (e) { }
+  unlockVisibleLayers(doc.layers);
   app.selection = null;
 }
 
-function unlockLayers(layers) {
+function unlockVisibleLayers(layers) {
   for (var i = 0, len = layers.length; i < len; i++) {
-    try { layers[i].locked = false; } catch (e) { }
-    try { layers[i].visible = true; } catch (e) { }
-    if (layers[i].layers && layers[i].layers.length) {
-      unlockLayers(layers[i].layers);
+    var l = layers[i];
+    if (l.visible) {
+      try { l.locked = false; } catch (e) { }
+      if (l.layers && l.layers.length) {
+        unlockVisibleLayers(l.layers);
+      }
     }
   }
 }
@@ -1759,9 +1728,11 @@ function unlockLayers(layers) {
 function limitGroupDepth(layers, depth) {
   depth = (isNaN(parseInt(depth)) ? 4 : parseInt(depth)) + 1;
   for (var i = 0; i < layers.length; i++) {
-    groupNormalize(layers[i].groupItems, depth);
-    if (layers[i].layers && layers[i].layers.length) {
-      limitGroupDepth(layers[i].layers, depth);
+    if (layers[i].visible) {
+      groupNormalize(layers[i].groupItems, depth);
+      if (layers[i].layers && layers[i].layers.length) {
+        limitGroupDepth(layers[i].layers, depth);
+      }
     }
   }
 }
@@ -2109,11 +2080,83 @@ function revealInExplorer(targetFile) {
   } catch (e) { }
 }
 
+function showSuccessPopup(fileObj, folPathStr) {
+  try { app.activate(); } catch (e) { }
+
+  var dlg = new Window('dialog', 'Ai2Psd_Pro');
+  dlg.orientation = 'column';
+  dlg.alignChildren = ['fill', 'top'];
+  dlg.spacing = 14;
+  dlg.margins = 18;
+
+  var titleTxt = dlg.add('statictext', undefined, '✓ PSD Export Completed Successfully!');
+  try {
+    titleTxt.graphics.font = ScriptUI.newFont(dlg.graphics.font.name, 'Bold', 13);
+    titleTxt.graphics.foregroundColor = dlg.graphics.newPen(dlg.graphics.PenType.SOLID_COLOR, [0.05, 0.65, 0.25, 1], 1);
+  } catch (e) { }
+
+  var infoPnl = dlg.add('panel', undefined, 'Saved Details');
+  infoPnl.alignChildren = 'left';
+  infoPnl.margins = 12;
+
+  var fileName = (fileObj && fileObj.name) ? fileObj.name : 'PSD Export';
+  infoPnl.add('statictext', undefined, 'File: ' + fileName);
+  infoPnl.add('statictext', undefined, 'Location: ' + folPathStr);
+
+  var btnGrp = dlg.add('group');
+  btnGrp.orientation = 'row';
+  btnGrp.alignment = 'center';
+  btnGrp.spacing = 12;
+
+  var openBtn = btnGrp.add('button', undefined, 'Open Folder', { name: 'ok' });
+  var closeBtn = btnGrp.add('button', undefined, 'OK');
+
+  openBtn.onClick = function () {
+    dlg.close();
+    if (fileObj) {
+      revealInExplorer(fileObj);
+    }
+  };
+
+  closeBtn.onClick = function () {
+    dlg.close();
+  };
+
+  dlg.show();
+}
+
+function showErrorPopup(errMsg) {
+  try { app.activate(); } catch (e) { }
+
+  var dlg = new Window('dialog', 'Ai2Psd_Pro Error');
+  dlg.orientation = 'column';
+  dlg.alignChildren = ['fill', 'top'];
+  dlg.spacing = 14;
+  dlg.margins = 18;
+
+  var titleTxt = dlg.add('statictext', undefined, '⚠ PSD Export Failed');
+  try {
+    titleTxt.graphics.font = ScriptUI.newFont(dlg.graphics.font.name, 'Bold', 13);
+    titleTxt.graphics.foregroundColor = dlg.graphics.newPen(dlg.graphics.PenType.SOLID_COLOR, [0.85, 0.15, 0.15, 1], 1);
+  } catch (e) { }
+
+  dlg.add('statictext', undefined, 'Error: ' + errMsg);
+  dlg.add('statictext', undefined, 'Please check that the document has open/visible artwork.');
+
+  var okBtn = dlg.add('button', undefined, 'OK', { name: 'ok' });
+  okBtn.onClick = function () { dlg.close(); };
+
+  dlg.show();
+}
+
 function exportAsPsd(doc, opts) {
   var fol = null;
   try {
-    if (doc && doc.path && doc.path.exists) {
-      fol = doc.path;
+    if (doc && doc.path) {
+      var p = doc.path;
+      if (p.toString().length > 0) {
+        fol = p;
+      }
     }
   } catch (e) {
     fol = null;
