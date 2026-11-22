@@ -1,4 +1,4 @@
 {
-  "version": "5.3",
-  "notes": "Direct Desktop PSD export, automatic Explorer reveal, pure Hardware ID (HWID) license binding, and installer enhancements."
+  "version": "5.4",
+  "notes": "Direct same-folder PSD export, automatic Explorer reveal, clean native UI, and isolation mode exit fix."
 }

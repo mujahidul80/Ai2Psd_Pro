@@ -14,7 +14,7 @@ $.localize = true;
 // GOOGLE SCRIPT & GITHUB CONFIGURATION
 // ==========================================
 var LICENSE_CFG = {
-  currentVersion: '5.3',
+  currentVersion: '5.4',
   apiUrl: 'https://script.google.com/macros/s/AKfycby9-GyRG5SWyUvoUHuEhtX_DY0n8KjEH_M8TYMAF3eCYpRnED9mJXNyE5hrIZ-FwCQr/exec',
   versionUrl: 'https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/version.json',
   installCmd: 'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/install.ps1 | iex"',
@@ -952,8 +952,35 @@ function handleActivationFlow(initialMsg, isError, hwid, now) {
 
 function exitIsolationMode() {
   try {
-    while (app.documents.length && app.activeDocument.hasIsolatedArtwork) {
-      app.executeMenuCommand('exitIsolate');
+    var isIso = false;
+    try {
+      var testL = app.activeDocument.layers.add();
+      testL.remove();
+    } catch (e) {
+      isIso = true;
+    }
+    if (isIso) {
+      try { app.executeMenuCommand('isolateModeExit'); } catch (e) { }
+      try { app.executeMenuCommand('exitIsolate'); } catch (e) { }
+      var isMac = /mac/i.test($.os);
+      if (isMac) {
+        try {
+          app.doScript('tell application "System Events" to key code 53', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+        } catch (e) { }
+      } else {
+        var vbs = new File(Folder.temp + '/ai2psd_esc.vbs');
+        vbs.open('w');
+        vbs.writeln('Set ws = CreateObject("WScript.Shell")');
+        vbs.writeln('ws.AppActivate "Adobe Illustrator"');
+        vbs.writeln('WScript.Sleep 50');
+        vbs.writeln('ws.SendKeys "{ESC}"');
+        vbs.writeln('WScript.Sleep 50');
+        vbs.writeln('ws.SendKeys "{ESC}"');
+        vbs.close();
+        vbs.execute();
+        $.sleep(200);
+        if (vbs.exists) vbs.remove();
+      }
     }
   } catch (e) { }
 }
@@ -1139,24 +1166,6 @@ function main() {
   rangeInp.characters = 12;
   rangeInp.helpTip = '"1, 3-5" -> 1, 3, 4, 5';
 
-  // DESTINATION PANEL
-  var destPnl = win.add('panel', undefined, 'Save PSD Destination');
-  destPnl.alignChildren = 'left';
-  destPnl.margins = CFG.mgns;
-
-  var destGrp = destPnl.add('group');
-  destGrp.orientation = 'row';
-  destGrp.alignChildren = ['left', 'center'];
-  destGrp.spacing = 14;
-
-  var destDeskRb = destGrp.add('radiobutton', undefined, 'Desktop (Instant Access)');
-  destDeskRb.value = true;
-  var destDocRb = destGrp.add('radiobutton', undefined, 'Original .ai Folder');
-  destDocRb.enabled = hasOpenDoc() && (function(){ try { return doc && doc.path && doc.path.toString().length > 0; } catch(e){ return false; } })();
-
-  var openFolCb = destPnl.add('checkbox', undefined, 'Open & highlight PSD in Explorer when finished');
-  openFolCb.value = true;
-
   // TWO COLUMN LAYOUT
   var row = win.add('group');
   row.alignChildren = ['fill', 'fill'];
@@ -1336,9 +1345,6 @@ function main() {
       return;
     }
 
-    var saveToDesktop = destDeskRb.value;
-    var autoOpenExplorer = openFolCb.value;
-
     ok.enabled = false;
     progLbl.text = 'Doc: 1' + LANG.of + docs.length;
     addCompShapeAction(CFG.actSet, CFG.actName, CFG.actPath);
@@ -1373,7 +1379,7 @@ function main() {
         exitIsolationMode();
 
         var psdOpts = setExportOptions(currDoc);
-        var res = exportAsPsd(currDoc, psdOpts, saveToDesktop);
+        var res = exportAsPsd(currDoc, psdOpts);
         if (res && res.success) {
           exportedItems.push(res);
         } else {
@@ -1399,7 +1405,7 @@ function main() {
       var targetFol = firstRes.folder;
       var folPathStr = (targetFol && targetFol.fsName) ? targetFol.fsName : (Folder.desktop.fsName || 'Desktop');
       
-      if (autoOpenExplorer && firstRes.file) {
+      if (firstRes.file && firstRes.file.exists) {
         revealInExplorer(firstRes.file);
       }
 
@@ -1428,8 +1434,6 @@ function main() {
     data.ppi = ppiInp.text;
     data.color = origColRb.value ? 0 : (rgbRb.value ? 1 : 2);
     data.expand = isExpandComp.value;
-    data.dest = destDeskRb.value ? 0 : 1;
-    data.open_fol = openFolCb.value;
 
     f.write(stringify(data));
     f.close();
@@ -1469,11 +1473,6 @@ function main() {
           else if (data.color == 1) rgbRb.value = true;
           else cmykRb.value = true;
           if (data.expand !== undefined) isExpandComp.value = String(data.expand) === 'true';
-          if (data.dest !== undefined && destDocRb.enabled) {
-            if (parseInt(data.dest) === 1) destDocRb.value = true;
-            else destDeskRb.value = true;
-          }
-          if (data.open_fol !== undefined) openFolCb.value = String(data.open_fol) === 'true';
         }
       } catch (err) { }
     }
@@ -1742,14 +1741,16 @@ function collectItemsFast(coll, results) {
 
 function unlockAll(doc) {
   unlockLayers(doc.layers);
+  try { app.executeMenuCommand('showAll'); } catch (e) { }
   try { app.executeMenuCommand('unlockAll'); } catch (e) { }
   app.selection = null;
 }
 
 function unlockLayers(layers) {
   for (var i = 0, len = layers.length; i < len; i++) {
-    layers[i].locked = false;
-    if (layers[i].layers.length) {
+    try { layers[i].locked = false; } catch (e) { }
+    try { layers[i].visible = true; } catch (e) { }
+    if (layers[i].layers && layers[i].layers.length) {
       unlockLayers(layers[i].layers);
     }
   }
@@ -2059,19 +2060,67 @@ function getUnique(arr) {
   return unique;
 }
 
-function exportAsPsd(doc, opts, saveToDesktop) {
-  var fol;
-  if (saveToDesktop) {
-    fol = Folder.desktop;
-  } else {
-    try {
+function findExportedFile(fol, baseName, isMulti, doc) {
+  try {
+    if (isMulti) {
+      try {
+        var currentAb = doc.artboards[doc.artboards.getActiveArtboardIndex()];
+        var cand = new File(fol, baseName + '_' + currentAb.name + '.psd');
+        if (cand.exists) return cand;
+      } catch (e) { }
+      var cand1 = new File(fol, baseName + '_Artboard 1.psd');
+      if (cand1.exists) return cand1;
+      var multiFiles = fol.getFiles(baseName + '*.psd');
+      if (multiFiles && multiFiles.length > 0) return multiFiles[0];
+    }
+    var std = new File(fol, baseName + '.psd');
+    if (std.exists) return std;
+    var any = fol.getFiles(baseName + '*.psd');
+    if (any && any.length > 0) return any[0];
+    return std;
+  } catch (e) {
+    return new File(fol, baseName + '.psd');
+  }
+}
+
+function revealInExplorer(targetFile) {
+  if (!targetFile) return;
+  var isMac = /mac/i.test($.os);
+  try {
+    if (isMac) {
+      var sh = new File(Folder.temp + '/ai2psd_reveal.sh');
+      sh.open('w');
+      sh.writeln('#!/bin/bash');
+      sh.writeln('open -R "' + targetFile.fsName + '"');
+      sh.close();
+      sh.execute();
+      $.sleep(100);
+      if (sh.exists) sh.remove();
+    } else {
+      var bat = new File(Folder.temp + '/ai2psd_reveal.bat');
+      bat.open('w');
+      bat.writeln('@echo off');
+      bat.writeln('start "" explorer.exe /select,"' + targetFile.fsName + '"');
+      bat.close();
+      bat.execute();
+      $.sleep(100);
+      if (bat.exists) bat.remove();
+    }
+  } catch (e) { }
+}
+
+function exportAsPsd(doc, opts) {
+  var fol = null;
+  try {
+    if (doc && doc.path && doc.path.exists) {
       fol = doc.path;
-    } catch (e) {
-      fol = Folder.desktop;
     }
-    if (!fol || fol.toString().length < 1) {
-      fol = Folder.desktop;
-    }
+  } catch (e) {
+    fol = null;
+  }
+  // If document is unsaved or doc.path is not available, save to Desktop
+  if (!fol) {
+    fol = Folder.desktop;
   }
 
   var baseName = 'Untitled';
@@ -2082,9 +2131,9 @@ function exportAsPsd(doc, opts, saveToDesktop) {
 
   var targetFile;
   if (opts.saveMultipleArtboards) {
-    targetFile = new File(decodeURI(fol) + '/' + baseName);
+    targetFile = new File(fol, baseName);
   } else {
-    targetFile = new File(decodeURI(fol) + '/' + baseName + '.psd');
+    targetFile = new File(fol, baseName + '.psd');
   }
 
   if (opts.writeLayers) {
@@ -2097,42 +2146,42 @@ function exportAsPsd(doc, opts, saveToDesktop) {
     } catch (csErr) { }
   }
 
-  // Attempt 1: Full layered export
+  // Attempt 1: Full layered export with maximum editability in the SAME FOLDER
   try {
     doc.exportFile(targetFile, ExportType.PHOTOSHOP, opts);
-    var savedFile = opts.saveMultipleArtboards ? new File(decodeURI(fol) + '/' + baseName + '_Artboard 1.psd') : targetFile;
-    if (!savedFile.exists) savedFile = targetFile;
+    var savedFile = findExportedFile(fol, baseName, opts.saveMultipleArtboards, doc);
     return { success: true, file: savedFile, folder: fol };
   } catch (err1) {
-    // Attempt 2: Try with maximumEditability = false (preserves layers)
+    // Attempt 2: maximumEditability = false, editableText = false (preserves layers and shapes)
     try {
       opts.maximumEditability = false;
+      opts.editableText = false;
       doc.exportFile(targetFile, ExportType.PHOTOSHOP, opts);
-      var savedFile2 = opts.saveMultipleArtboards ? new File(decodeURI(fol) + '/' + baseName + '_Artboard 1.psd') : targetFile;
-      if (!savedFile2.exists) savedFile2 = targetFile;
+      var savedFile2 = findExportedFile(fol, baseName, opts.saveMultipleArtboards, doc);
       return { success: true, file: savedFile2, folder: fol };
     } catch (err2) { }
 
-    // Attempt 3: If multi-artboard failed, export single file
+    // Attempt 3: If multi-artboard failed, export single artboard file in the SAME FOLDER
     try {
       if (opts.saveMultipleArtboards) {
         opts.saveMultipleArtboards = false;
         opts.artboardRange = '';
-        var singleFile = new File(decodeURI(fol) + '/' + baseName + '.psd');
+        var singleFile = new File(fol, baseName + '.psd');
         doc.exportFile(singleFile, ExportType.PHOTOSHOP, opts);
-        return { success: true, file: singleFile, folder: fol };
+        var savedFile3 = findExportedFile(fol, baseName, false, doc);
+        return { success: true, file: savedFile3, folder: fol };
       }
     } catch (err3) { }
 
-    // Attempt 4: Fallback to Desktop
-    try {
-      var deskFile = new File(Folder.desktop + '/' + baseName + '.psd');
-      opts.saveMultipleArtboards = false;
-      opts.artboardRange = '';
-      opts.maximumEditability = false;
-      doc.exportFile(deskFile, ExportType.PHOTOSHOP, opts);
-      return { success: true, file: deskFile, folder: Folder.desktop };
-    } catch (err4) { }
+    // Attempt 4: Fallback to Desktop only if doc.path was not desktop and had write permission error
+    if (fol.fsName !== Folder.desktop.fsName) {
+      try {
+        var deskTarget = opts.saveMultipleArtboards ? new File(Folder.desktop, baseName) : new File(Folder.desktop, baseName + '.psd');
+        doc.exportFile(deskTarget, ExportType.PHOTOSHOP, opts);
+        var savedDesk = findExportedFile(Folder.desktop, baseName, opts.saveMultipleArtboards, doc);
+        return { success: true, file: savedDesk, folder: Folder.desktop };
+      } catch (err4) { }
+    }
 
     return { success: false, error: err1.message };
   }
