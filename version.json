@@ -1,4 +1,4 @@
 {
-  "version": "5.7",
-  "notes": "1-Click Get License with Name & HWID auto-activation, fixed layer separation (preserved compound shapes), and added layer DOM refresh."
+  "version": "5.8",
+  "notes": "Hidden backend PC ID matching (removed from UI), 100% silent background execution (zero CMD flash), and 1-Click Get License auto-activation."
 }

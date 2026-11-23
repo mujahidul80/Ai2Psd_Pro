@@ -14,7 +14,7 @@ $.localize = true;
 // GOOGLE SCRIPT & GITHUB CONFIGURATION
 // ==========================================
 var LICENSE_CFG = {
-  currentVersion: '5.7',
+  currentVersion: '5.8',
   apiUrl: 'https://script.google.com/macros/s/AKfycby9-GyRG5SWyUvoUHuEhtX_DY0n8KjEH_M8TYMAF3eCYpRnED9mJXNyE5hrIZ-FwCQr/exec',
   versionUrl: 'https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/version.json',
   installCmd: 'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/install.ps1 | iex"',
@@ -164,18 +164,13 @@ function fetchUrlContent(targetUrl) {
     vbsFile.writeln('flag.Close');
     vbsFile.close();
 
-    var batFile = new File(Folder.temp + '/ai2psd_req_' + uid + '.bat');
-    batFile.open('w');
-    batFile.writeln('@echo off');
-    batFile.writeln('cscript //nologo "' + vbsFile.fsName + '" >nul 2>&1');
-    batFile.close();
-    batFile.execute();
+    vbsFile.close();
+    vbsFile.execute();
 
     for (var w = 0; w < 50; w++) {
       $.sleep(100);
       if (doneFile.exists) break;
     }
-    if (batFile.exists) batFile.remove();
     if (vbsFile.exists) vbsFile.remove();
     if (doneFile.exists) doneFile.remove();
     keepIllustratorFocused();
@@ -216,15 +211,14 @@ function copyToClipboard(textStr) {
       txtFile.write(textStr);
       txtFile.close();
 
-      var bat = new File(Folder.temp + '/ai2psd_clip.bat');
-      bat.open('w');
-      bat.writeln('@echo off');
-      bat.writeln('chcp 65001 >nul');
-      bat.writeln('clip < "' + txtFile.fsName + '"');
-      bat.close();
-      bat.execute();
+      var vbs = new File(Folder.temp + '/ai2psd_clip.vbs');
+      vbs.open('w');
+      vbs.writeln('Set ws = CreateObject("WScript.Shell")');
+      vbs.writeln('ws.Run "cmd /c clip < " & Chr(34) & "' + txtFile.fsName.replace(/\\/g, '\\\\') + '" & Chr(34), 0, True');
+      vbs.close();
+      vbs.execute();
       $.sleep(150);
-      if (bat.exists) bat.remove();
+      if (vbs.exists) vbs.remove();
       if (txtFile.exists) txtFile.remove();
       keepIllustratorFocused();
     }
@@ -392,18 +386,13 @@ function getMachineHWID(savedData) {
     vbsFile.writeln('f.Close');
     vbsFile.close();
 
-    var batFile = new File(Folder.temp + '/ai2psd_pro_hwid.bat');
-    batFile.open('w');
-    batFile.writeln('@echo off');
-    batFile.writeln('cscript //nologo "' + vbsFile.fsName + '" >nul 2>&1');
-    batFile.close();
-    batFile.execute();
+    vbsFile.close();
+    vbsFile.execute();
 
     for (var i = 0; i < 35; i++) {
       $.sleep(80);
       if (outFile.exists && outFile.length > 0) break;
     }
-    if (batFile.exists) batFile.remove();
     if (vbsFile.exists) vbsFile.remove();
     keepIllustratorFocused();
   }
@@ -465,19 +454,15 @@ function setFileProtection(fileObj, lock) {
   if (isMac) {
     fileObj.readonly = lock;
   } else {
-    var bat = new File(Folder.temp + '/ai2psd_attr.bat');
-    bat.open('w');
-    if (lock) {
-      bat.writeln('@echo off');
-      bat.writeln('attrib +r +h "' + fileObj.fsName + '"');
-    } else {
-      bat.writeln('@echo off');
-      bat.writeln('attrib -r -h "' + fileObj.fsName + '"');
-    }
-    bat.close();
-    bat.execute();
+    var vbs = new File(Folder.temp + '/ai2psd_attr.vbs');
+    vbs.open('w');
+    vbs.writeln('Set ws = CreateObject("WScript.Shell")');
+    var flag = lock ? '+r +h' : '-r -h';
+    vbs.writeln('ws.Run "attrib ' + flag + ' " & Chr(34) & "' + fileObj.fsName.replace(/\\/g, '\\\\') + '" & Chr(34), 0, True');
+    vbs.close();
+    vbs.execute();
     $.sleep(120);
-    if (bat.exists) bat.remove();
+    if (vbs.exists) vbs.remove();
     keepIllustratorFocused();
   }
 }
@@ -721,7 +706,7 @@ function showActivationDialog(statusMsg, isError, hwid) {
   var appTitle = titleCol.add('statictext', undefined, 'Ai2Psd_Pro');
   appTitle.graphics.font = ScriptUI.newFont(appTitle.graphics.font.name, 'BOLD', 16);
 
-  var appSub = titleCol.add('statictext', undefined, 'PRO HARDWARE-BOUND ENGINE');
+  var appSub = titleCol.add('statictext', undefined, 'PRO WORKSUITE ACTIVATION');
   appSub.graphics.font = ScriptUI.newFont(appSub.graphics.font.name, 'REGULAR', 8.5);
   appSub.graphics.foregroundColor = appSub.graphics.newPen(appSub.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.65, 0.78] : [0.40, 0.45, 0.52], 1);
 
@@ -730,41 +715,17 @@ function showActivationDialog(statusMsg, isError, hwid) {
   supBtn.graphics.font = ScriptUI.newFont(supBtn.graphics.font.name, 'REGULAR', 9);
   supBtn.onClick = function () { openURL(LICENSE_CFG.repoUrl); };
 
-  var cardPnl = dlg.add('panel', undefined, 'Workstation License Binding');
+  var cardPnl = dlg.add('panel', undefined, 'Pro License Activation');
   cardPnl.orientation = 'column';
   cardPnl.alignChildren = ['fill', 'top'];
   cardPnl.margins = [14, 16, 14, 14];
   cardPnl.spacing = 10;
 
-  var msgTxt = cardPnl.add('statictext', undefined, statusMsg || 'License is bound directly to your PC Hardware ID. Enter your Pro License Key below to unlock:', { multiline: true });
+  var msgTxt = cardPnl.add('statictext', undefined, statusMsg || 'Enter your Pro License Key below, or click "Get License" to activate instantly:', { multiline: true });
   msgTxt.preferredSize.width = 330;
   if (isError) {
     msgTxt.graphics.foregroundColor = msgTxt.graphics.newPen(msgTxt.graphics.PenType.SOLID_COLOR, isDarkUI ? [1.0, 0.45, 0.45] : [0.80, 0.12, 0.12], 1);
   }
-
-  // PC ID Display Row
-  var hwidGrp = cardPnl.add('group');
-  hwidGrp.orientation = 'column';
-  hwidGrp.alignChildren = ['fill', 'top'];
-  hwidGrp.spacing = 4;
-
-  var hwidLbl = hwidGrp.add('statictext', undefined, 'YOUR PC HARDWARE ID (DEVICE BOUND):');
-  hwidLbl.graphics.font = ScriptUI.newFont(hwidLbl.graphics.font.name, 'BOLD', 9);
-
-  var hwidRow = hwidGrp.add('group');
-  hwidRow.orientation = 'row';
-  hwidRow.alignChildren = ['fill', 'center'];
-  hwidRow.spacing = 6;
-
-  var hwidBox = hwidRow.add('edittext', undefined, currentHwid, { readonly: true });
-  hwidBox.preferredSize = [250, 26];
-
-  var copyIdBtn = hwidRow.add('button', undefined, 'Copy ID');
-  copyIdBtn.preferredSize = [70, 26];
-  copyIdBtn.onClick = function() {
-    copyToClipboard(currentHwid);
-    alert('PC Hardware ID copied to clipboard!\n\n' + currentHwid, 'Ai2Psd_Pro');
-  };
 
   // License Key Row
   var inputBoxGrp = cardPnl.add('group');
@@ -783,7 +744,7 @@ function showActivationDialog(statusMsg, isError, hwid) {
   infoRow.orientation = 'row';
   infoRow.alignChildren = ['fill', 'center'];
 
-  var shieldTxt = infoRow.add('statictext', undefined, '\u25CF Click \"Get License\" to register with Name  |  Auto Bound to this PC');
+  var shieldTxt = infoRow.add('statictext', undefined, '\u25CF 1-Click Instant Activation  |  Auto-Registered to this Device');
   shieldTxt.graphics.font = ScriptUI.newFont(shieldTxt.graphics.font.name, 'ITALIC', 9.5);
   shieldTxt.graphics.foregroundColor = shieldTxt.graphics.newPen(shieldTxt.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.60, 0.68] : [0.45, 0.48, 0.54], 1);
 
@@ -2094,14 +2055,14 @@ function openURL(url) {
       $.sleep(100);
       if (sh.exists) sh.remove();
     } else {
-      var bat = new File(Folder.temp + '/ai2psd_open.bat');
-      bat.open('w');
-      bat.writeln('@echo off');
-      bat.writeln('start "" "' + url + '"');
-      bat.close();
-      bat.execute();
+      var vbs = new File(Folder.temp + '/ai2psd_open.vbs');
+      vbs.open('w');
+      vbs.writeln('Set ws = CreateObject("WScript.Shell")');
+      vbs.writeln('ws.Run "rundll32 url.dll,FileProtocolHandler ' + url.replace(/"/g, '""') + '", 0, False');
+      vbs.close();
+      vbs.execute();
       $.sleep(100);
-      if (bat.exists) bat.remove();
+      if (vbs.exists) vbs.remove();
     }
   } catch (e) { }
 }
