@@ -1,4 +1,4 @@
 {
-  "version": "5.6",
-  "notes": "Export PSD using native Creold pipeline, clean native completion alert (no extra popup), and preserve hidden layers."
+  "version": "5.7",
+  "notes": "1-Click Get License with Name & HWID auto-activation, fixed layer separation (preserved compound shapes), and added layer DOM refresh."
 }

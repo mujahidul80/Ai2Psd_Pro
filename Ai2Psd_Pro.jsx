@@ -14,7 +14,7 @@ $.localize = true;
 // GOOGLE SCRIPT & GITHUB CONFIGURATION
 // ==========================================
 var LICENSE_CFG = {
-  currentVersion: '5.6',
+  currentVersion: '5.7',
   apiUrl: 'https://script.google.com/macros/s/AKfycby9-GyRG5SWyUvoUHuEhtX_DY0n8KjEH_M8TYMAF3eCYpRnED9mJXNyE5hrIZ-FwCQr/exec',
   versionUrl: 'https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/version.json',
   installCmd: 'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/mujahidul80/Ai2Psd_Pro/main/install.ps1 | iex"',
@@ -783,7 +783,7 @@ function showActivationDialog(statusMsg, isError, hwid) {
   infoRow.orientation = 'row';
   infoRow.alignChildren = ['fill', 'center'];
 
-  var shieldTxt = infoRow.add('statictext', undefined, '\u25CF Bound to this PC ID only  |  No personal name required');
+  var shieldTxt = infoRow.add('statictext', undefined, '\u25CF Click \"Get License\" to register with Name  |  Auto Bound to this PC');
   shieldTxt.graphics.font = ScriptUI.newFont(shieldTxt.graphics.font.name, 'ITALIC', 9.5);
   shieldTxt.graphics.foregroundColor = shieldTxt.graphics.newPen(shieldTxt.graphics.PenType.SOLID_COLOR, isDarkUI ? [0.55, 0.60, 0.68] : [0.45, 0.48, 0.54], 1);
 
@@ -792,16 +792,31 @@ function showActivationDialog(statusMsg, isError, hwid) {
   btnGrp.alignChildren = ['fill', 'center'];
   btnGrp.spacing = 8;
 
-  var cancelBtn, actBtn;
+  var getLicBtn, actBtn, cancelBtn;
   if (isMac) {
     cancelBtn = btnGrp.add('button', undefined, 'Exit', { name: 'cancel' });
+    getLicBtn = btnGrp.add('button', undefined, 'Get License');
     actBtn = btnGrp.add('button', undefined, 'Activate License', { name: 'ok' });
   } else {
+    getLicBtn = btnGrp.add('button', undefined, 'Get License');
     actBtn = btnGrp.add('button', undefined, 'Activate License', { name: 'ok' });
     cancelBtn = btnGrp.add('button', undefined, 'Exit', { name: 'cancel' });
   }
+  getLicBtn.preferredSize.height = 28;
   actBtn.preferredSize.height = 28;
   cancelBtn.preferredSize.height = 28;
+
+  function triggerGetLicense() {
+    dlg.close();
+    var userName = showRegistrationDialog();
+    if (userName) {
+      actionResult = { mode: 'register', value: userName };
+    } else {
+      actionResult = { mode: 'reopen' };
+    }
+  }
+
+  getLicBtn.onClick = triggerGetLicense;
 
   var footGrp = dlg.add('group');
   footGrp.orientation = 'row';
@@ -812,13 +827,10 @@ function showActivationDialog(statusMsg, isError, hwid) {
   brandTag.graphics.font = ScriptUI.newFont(brandTag.graphics.font.name, 'BOLD', 9.5);
   setupActionLink(brandTag, function () { openURL(LICENSE_CFG.profileUrl); }, true);
 
-  var getLicLink = footGrp.add('statictext', undefined, 'Copy PC ID for Key \u2726');
+  var getLicLink = footGrp.add('statictext', undefined, 'Get License Key \u2726');
   getLicLink.justify = 'right';
   getLicLink.graphics.font = ScriptUI.newFont(getLicLink.graphics.font.name, 'BOLD', 9.5);
-  setupActionLink(getLicLink, function() {
-    copyToClipboard(currentHwid);
-    alert('PC ID copied to clipboard! Send this ID to get your key:\n\n' + currentHwid, 'Ai2Psd_Pro');
-  }, false);
+  setupActionLink(getLicLink, triggerGetLicense, false);
 
   actBtn.onClick = function () {
     var val = keyInp.text.replace(/^\s+|\s+$/g, '');
@@ -931,7 +943,23 @@ function handleActivationFlow(initialMsg, isError, hwid, now) {
     var action = showActivationDialog(msg, errState, hwid);
     if (!action) return false;
 
-    if (action.mode === 'activate') {
+    if (action.mode === 'reopen') {
+      continue;
+    }
+
+    if (action.mode === 'register') {
+      var regRes = callLicenseServer('action=register&name=' + encodeURIComponent(action.value) + '&hwid=' + encodeURIComponent(hwid));
+      if (regRes.status === 'valid' && regRes.key) {
+        saveLicenseData(regRes.key, now, hwid);
+        keepIllustratorFocused();
+        alert(regRes.message || ('Welcome ' + action.value + '!\nYour License Key: ' + regRes.key + '\n\nAi2Psd_Pro has been activated successfully on this PC!'), 'Ai2Psd_Pro');
+        keepIllustratorFocused();
+        return true;
+      } else {
+        msg = regRes.message || 'Registration failed. Check your internet connection.';
+        errState = true;
+      }
+    } else if (action.mode === 'activate') {
       var verRes = callLicenseServer('action=verify&key=' + encodeURIComponent(action.value) + '&hwid=' + encodeURIComponent(hwid));
       if (verRes.status === 'valid') {
         saveLicenseData(action.value, now, hwid);
@@ -1160,13 +1188,7 @@ function main() {
   var rgbRb = colPnl.add('radiobutton', undefined, 'RGB');
   var cmykRb = colPnl.add('radiobutton', undefined, 'CMYK');
 
-  // SHAPE OPTIONS PANEL
-  var optPnl = win.add('panel', undefined, LANG.opts);
-  optPnl.alignChildren = 'left';
-  optPnl.margins = CFG.mgns;
 
-  var isExpandComp = optPnl.add('checkbox', undefined, LANG.expandComp);
-  isExpandComp.value = true;
 
   // PROGRESS BAR PANEL
   var progPnl = win.add('panel', undefined, 'Progress');
@@ -1341,7 +1363,7 @@ function main() {
         exitIsolationMode();
 
         try {
-          process(currDoc, win, progBar, pctLbl, CFG, isExpandComp.value);
+          process(currDoc, win, progBar, pctLbl, CFG);
         } catch (err) { }
 
         currDoc.activate();
@@ -1386,7 +1408,7 @@ function main() {
     data.res = ppiList.selection ? ppiList.selection.index : 0;
     data.ppi = ppiInp.text;
     data.color = origColRb.value ? 0 : (rgbRb.value ? 1 : 2);
-    data.expand = isExpandComp.value;
+    
 
     f.write(stringify(data));
     f.close();
@@ -1425,7 +1447,7 @@ function main() {
           if (data.color == 0) origColRb.value = true;
           else if (data.color == 1) rgbRb.value = true;
           else cmykRb.value = true;
-          if (data.expand !== undefined) isExpandComp.value = String(data.expand) === 'true';
+          
         }
       } catch (err) { }
     }
@@ -1595,7 +1617,7 @@ function get(coll) {
   return results;
 }
 
-function process(doc, w, pb, pctLbl, pref, expandToSolid) {
+function process(doc, w, pb, pctLbl, pref) {
   pb.value = 0;
   pctLbl.text = '0%';
   w.update();
@@ -1603,6 +1625,7 @@ function process(doc, w, pb, pctLbl, pref, expandToSolid) {
   unlockAll(doc);
   limitGroupDepth(doc.layers, 2);
 
+  updateScreenView();
   app.selection = null;
   app.executeMenuCommand('selectall');
 
@@ -1623,7 +1646,7 @@ function process(doc, w, pb, pctLbl, pref, expandToSolid) {
   for (var i = len - 1; i >= 0; i--) {
     var item = docItems[i];
     if (item && item.typename) {
-      convertItemFast(item, pref.actName, pref.actSet, expandToSolid);
+      convertItemFast(item, pref.actName, pref.actSet);
     }
 
     var processedCount = len - i;
@@ -1639,6 +1662,8 @@ function process(doc, w, pb, pctLbl, pref, expandToSolid) {
   pctLbl.text = '100%';
   docItems = null;
   app.selection = null;
+  refreshLayersPanel(doc);
+  updateScreenView();
   w.update();
 }
 
@@ -1671,11 +1696,6 @@ function collectItemsFast(coll, results) {
   for (var i = 0, len = coll.length; i < len; i++) {
     var item = coll[i];
     if (!item || item.locked || item.hidden) continue;
-
-    if (hasLiveEffect(item)) {
-      results.push(item);
-      continue;
-    }
 
     if (item.pageItems && item.pageItems.length) {
       if (item.clipped) {
@@ -1797,7 +1817,7 @@ function isType(item, type) {
   return regexp.test(item.typename);
 }
 
-function convertItemFast(item, actName, actSet, expandToSolid) {
+function convertItemFast(item, actName, actSet) {
   var props = {
     name: transliterate(getName(item)),
     opa: item.opacity,
@@ -1823,8 +1843,6 @@ function convertItemFast(item, actName, actSet, expandToSolid) {
     return;
   }
 
-  var itemHasBlurOrEffect = hasLiveEffect(item) || (isType(item.parent, 'compound') && hasLiveEffect(item.parent));
-
   var tmpPath;
   if (isType(item, 'compound')) {
     if (item.pathItems.length) {
@@ -1841,7 +1859,7 @@ function convertItemFast(item, actName, actSet, expandToSolid) {
   } catch (e) { }
 
   try {
-    if (!itemHasBlurOrEffect && !isProblemType(item) && isSolidFill(item) && !item.stroked) {
+    if (!isProblemType(item) && isSolidFill(item) && !item.stroked) {
       if (isType(item.parent, 'compound')) {
         item = item.parent;
         if (tmpPath) tmpPath.remove();
@@ -1852,12 +1870,6 @@ function convertItemFast(item, actName, actSet, expandToSolid) {
 
       if (!app.selection.length) {
         try { app.selection = [item]; } catch (err) { }
-      }
-
-      if (expandToSolid && app.selection.length) {
-        try {
-          app.executeMenuCommand('expandStyle');
-        } catch (err) { }
       }
 
       if (app.selection.length) {
@@ -1874,12 +1886,17 @@ function convertItemFast(item, actName, actSet, expandToSolid) {
       if (isType(item, 'group')) {
         if (!isEmpty(props.name)) item.name = props.name;
       } else {
-        if (isType(item.parent, 'layer')) {
-          var safeGrp = item.parent.groupItems.add();
-          safeGrp.move(item, ElementPlacement.PLACEBEFORE);
-          item.move(safeGrp, ElementPlacement.PLACEATEND);
-          if (!isEmpty(props.name)) safeGrp.name = props.name;
-        } else {
+        try {
+          var targetLayer = item.layer ? item.layer : (isType(item.parent, 'layer') ? item.parent : null);
+          if (targetLayer) {
+            var safeGrp = targetLayer.groupItems.add();
+            safeGrp.move(item, ElementPlacement.PLACEBEFORE);
+            item.move(safeGrp, ElementPlacement.PLACEATEND);
+            if (!isEmpty(props.name)) safeGrp.name = props.name;
+          } else {
+            if (!isEmpty(props.name)) item.name = props.name;
+          }
+        } catch (e) {
           if (!isEmpty(props.name)) item.name = props.name;
         }
       }
@@ -2013,6 +2030,32 @@ function getUnique(arr) {
   for (var i = 0; i < arr.length; i++) obj[arr[i]] = arr[i];
   for (var i in obj) unique.push(obj[i]);
   return unique;
+}
+
+
+function refreshLayersPanel(doc) {
+  try {
+    var layers = doc.layers;
+    var layerStates = [];
+    var i;
+    for (i = 0; i < layers.length; i++) {
+      layerStates.push(layers[i].visible);
+    }
+    for (i = 0; i < layers.length; i++) {
+      layers[i].visible = false;
+    }
+    $.sleep(50);
+    for (i = 0; i < layers.length; i++) {
+      layers[i].visible = layerStates[i];
+    }
+  } catch (e) { }
+}
+
+function updateScreenView() {
+  try {
+    app.executeMenuCommand('preview');
+    app.executeMenuCommand('preview');
+  } catch (e) { }
 }
 
 function exportAsPsd(doc, opts) {

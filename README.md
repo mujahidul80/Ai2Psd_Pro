@@ -5,7 +5,7 @@
 
 <p align="center">
   <a href="https://github.com/mujahidul80/Ai2Psd_Pro/stargazers"><img src="https://img.shields.io/github/stars/mujahidul80/Ai2Psd_Pro?style=for-the-badge&logo=github&color=0078D6" alt="Stars" /></a>
-  <a href="https://github.com/mujahidul80/Ai2Psd_Pro/releases"><img src="https://img.shields.io/badge/Version-v5.6--Pro-success?style=for-the-badge&logo=checkmarx" alt="Version" /></a>
+  <a href="https://github.com/mujahidul80/Ai2Psd_Pro/releases"><img src="https://img.shields.io/badge/Version-v5.7--Pro-success?style=for-the-badge&logo=checkmarx" alt="Version" /></a>
   <a href="#-compatibility"><img src="https://img.shields.io/badge/Illustrator-CS6%20to%202026%2B-FF9A00?style=for-the-badge&logo=adobeillustrator&logoColor=white" alt="Illustrator" /></a>
   <a href="#-1-click-installer-windows"><img src="https://img.shields.io/badge/Install-1--Click%20Ready-blueviolet?style=for-the-badge&logo=powershell" alt="Install" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License" /></a>
